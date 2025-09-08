@@ -1,0 +1,93 @@
+
+Términos y Condiciones de ZERO
+
+Última actualización: 18 de agosto de 2025
+Titular del servicio: ZERO AI
+Domicilio: Bucaramanga, Colombia
+Contacto: soporte@zeroai.site
+
+Al crear una cuenta, autenticarse (usuario/contraseña o tarjeta NFC) o usar ZERO (“Servicio”), aceptas íntegramente estos Términos y Condiciones (“T&C”). Si no estás de acuerdo, no uses el Servicio.
+
+1) Definiciones
+	•	ZERO / el Servicio: Plataforma de IA que procesa entradas de texto/archivos para generar resultados.
+	•	Usuario: Persona que accede o usa el Servicio.
+	•	Contenido del Usuario: Datos, textos, archivos, prompts, instrucciones y materiales que el Usuario carga o introduce.
+	•	Salidas/Resultados de IA: Respuestas, textos, imágenes u otros outputs generados por ZERO.
+	•	Cuenta: Registro del Usuario con credenciales (usuario/contraseña) o credenciales físicas (tarjeta NFC).
+
+2) Objeto del Servicio
+
+ZERO permite interactuar con modelos de inteligencia artificial para generar contenido y realizar tareas automatizadas. Las Salidas pueden contener errores o inexactitudes y no constituyen asesoría profesional (legal, médica, financiera, contable, de seguridad, etc.). Usa criterio y verificación humana antes de actuar en base a ellas.
+
+3) Registro, acceso y seguridad
+
+3.1. Edad mínima. Mayores de 13 años; si tienes 13–17, requieres autorización de tu representante legal.
+3.2. Autenticación. Acceso por usuario/contraseña y, cuando esté disponible, tarjeta NFC. Eres responsable de custodiar tus credenciales/tarjeta y de toda actividad realizada con tu cuenta. Notifica de inmediato accesos no autorizados o pérdida/robo de la tarjeta NFC.
+3.3. Medidas de seguridad. Aplicamos controles razonables; no garantizamos seguridad absoluta. Aceptas los riesgos inherentes al uso de servicios en línea.
+
+4) Licencias sobre tu contenido y sobre las salidas
+
+4.1. Contenido del Usuario. Conservas la titularidad. Concedes a ZERO una licencia mundial, no exclusiva y gratuita para alojar, reproducir, procesar y mostrar tu Contenido solo para operar y mejorar el Servicio (incluida prevención de abuso) y cumplir la ley.
+4.2. Salidas. Salvo indicación contraria por escrito, adquieres los derechos patrimoniales que a ZERO le correspondan sobre las Salidas, en la medida permitida por la ley y siempre que cumplas estos T&C; esto no transmite derechos sobre obras o datos preexistentes de terceros ni sobre tecnologías de ZERO o sus licenciantes.
+4.3. Feedback. Concedes a ZERO una licencia perpetua y gratuita para usar tus sugerencias/comentarios a fin de mejorar el Servicio.
+
+5) Uso permitido y prohibiciones
+
+No puedes:
+a) Usar ZERO para fines ilícitos, difamatorios, fraudulentos o que vulneren derechos de terceros (propiedad intelectual, imagen, datos personales).
+b) Generar o difundir malware, spam, ingeniería social, explotación sexual infantil, amenazas, incitación al odio o violencia.
+c) Crear deepfakes de personas reales sin consentimiento o con fines engañosos/dañinos.
+d) Eludir controles de seguridad, hacer scraping masivo, realizar pruebas de penetración sin permiso escrito, ingeniería inversa, extracción sistemática de datos o carga excesiva.
+e) Usar las Salidas para entrenar modelos sin las licencias necesarias de los titulares correspondientes.
+Podemos suspender o cancelar cuentas que incumplan este apartado.
+
+6) Datos personales y privacidad
+
+El tratamiento de datos personales se rige por nuestra Política de Privacidad (parte integral de estos T&C), conforme a la normativa colombiana de protección de datos personales (Ley 1581 de 2012, Decreto 1377 de 2013 y normas que las modifiquen). Allí se detallan finalidades, bases legales, tiempos de conservación y derechos de los titulares (acceso, rectificación, supresión, revocación).
+Mejora del modelo. Si habilitas “ayudar a mejorar”, ZERO podrá usar datos anonimizados/pseudonimizados para mejorar el Servicio. Podrás optar por no participar (opt-out) según se explique en la Política de Privacidad.
+
+7) Servicios y contenidos de terceros
+
+ZERO puede integrar software, modelos o APIs de terceros. No controlamos su disponibilidad ni garantías. Enlaces externos se ofrecen “tal cual”. El uso de servicios de terceros se rige por sus propios términos.
+
+8) Planes, precios y facturación (si aplica)
+
+Si ofreces planes de pago, incluye aquí: descripción de planes, período de prueba, ciclo de facturación, impuestos, reembolsos, mora, suspensión por impago y procedimiento de cancelación. En compras por medios electrónicos aplican las reglas del Estatuto del Consumidor (Ley 1480 de 2011) cuando proceda.
+
+9) Propiedad intelectual
+
+ZERO, su logotipo, interfaces, código, modelos, documentación y demás materiales son propiedad de ZERO o sus licenciantes y están protegidos por derechos de autor, marcas y otras normas aplicables. El Usuario recibe una licencia limitada, revocable y no exclusiva para usar el Servicio conforme a estos T&C.
+
+10) Exención de garantías
+
+El Servicio y las Salidas se proporcionan “tal cual” y “según disponibilidad”, sin garantías de comerciabilidad, adecuación a un propósito particular, exactitud o no infracción. ZERO no garantiza que las Salidas sean correctas, completas o libres de sesgos; el Usuario es responsable de su verificación y uso.
+
+11) Limitación de responsabilidad
+
+En la máxima medida permitida por la ley, ZERO y sus afiliadas no serán responsables por lucro cesante, pérdida de datos, daños indirectos, especiales, incidentales o consecuenciales, ni por fallas de terceros, fuerza mayor, indisponibilidad, brechas de seguridad no atribuibles a dolo o culpa grave, o uso indebido del Servicio por parte del Usuario. La responsabilidad total agregada de ZERO por cualquier reclamo no excederá el monto pagado por el Usuario en los últimos 12 meses (o $[valor] si es un plan gratuito).
+
+12) Indemnidad
+
+El Usuario mantendrá indemne a ZERO, sus directivos y personal frente a reclamos de terceros derivados de su uso del Servicio, infracción de estos T&C, vulneración de derechos de terceros o incumplimiento de la ley.
+
+13) Suspensión y terminación
+
+Podemos suspender o cerrar tu cuenta si: (i) incumples estos T&C; (ii) existe riesgo para la seguridad o para terceros; (iii) así lo exige la autoridad competente. Puedes cancelar en cualquier momento; ciertas obligaciones (pagos debidos, confidencialidad, licencias necesarias para operar, limitación de responsabilidad) permanecen vigentes tras la terminación.
+
+14) Modificaciones
+
+Podemos actualizar estos T&C para reflejar cambios legales o funcionales. Publicaremos la versión vigente con fecha de actualización; los cambios sustanciales se comunicarán por canales razonables. Si continúas usando el Servicio después de la actualización, se entiende tu aceptación.
+
+15) Notificaciones electrónicas y contrato por medios digitales
+
+Aceptas recibir notificaciones por correo electrónico o dentro del Servicio. Las transacciones y comunicaciones electrónicas tienen validez jurídica conforme a la Ley 527 de 1999 sobre mensajes de datos, comercio electrónico y firmas digitales.
+
+16) Ley aplicable y jurisdicción
+
+Estos T&C se rigen por las leyes de la República de Colombia, incluyendo, en lo pertinente, la Ley 1480 de 2011 (Estatuto del Consumidor), la Ley 1581 de 2012 y el Decreto 1377 de 2013 (protección de datos personales), y la Ley 527 de 1999 (comercio electrónico). Cualquier controversia se somete a los juzgados de [Ciudad, p. ej., Bogotá D.C.], salvo normas imperativas de protección al consumidor que indiquen otra competencia.
+
+17) Disposiciones finales
+	•	Totalidad del acuerdo. Estos T&C, junto con la Política de Privacidad, constituyen el acuerdo completo entre ZERO y el Usuario.
+	•	Nulidad parcial. Si una cláusula es inválida, las demás seguirán vigentes.
+	•	Cesión. El Usuario no puede ceder sus derechos/obligaciones sin consentimiento previo y escrito de ZERO; ZERO puede ceder este acuerdo en el marco de una reorganización o transferencia de negocio.
+

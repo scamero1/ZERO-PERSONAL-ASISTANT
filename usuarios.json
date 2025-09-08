@@ -1,0 +1,29 @@
+{
+    "admin": {
+        "clave": "admin",
+        "rol": "admin",
+        "nfc_uid": "0457857A291391",
+        "acepto_terminos": true,
+        "fecha_aceptacion_terminos": "2025-08-19 22:45:13"
+    },
+    "sebastian": {
+        "clave": "sebastianpass",
+        "rol": "user",
+        "nfc_uid": "04A7C3F8212280"
+    },
+    "SamuelGO": {
+        "clave": "1028482365",
+        "rol": "admin",
+        "nfc_uid": null
+    },
+    "Mariana": {
+        "clave": "Masoromo8",
+        "rol": "admin",
+        "nfc_uid": null
+    },
+    "valeria": {
+        "clave": "valeria",
+        "rol": "admin",
+        "nfc_uid": null
+    }
+}

@@ -1,0 +1,48 @@
+PROYECTO: Sitio web para restaurante — Plan PREMIUM
+Versión: 1.0
+Fecha: 2025-08-29
+
+1) OBJETIVO
+- Lanzar un sitio con identidad de marca, reservas online y analítica avanzada.
+
+2) ALCANCE
+- 6 páginas (home, menú dinámico ilimitado, galería, sobre nosotros, reservas, blog).
+- 2 idiomas (ES/EN).
+- 2 sesiones de UX (wireframes) + diseño UI personalizado.
+- 8 revisiones (incluye iteraciones de diseño).
+- Servidor VPS con CDN + SSL avanzado + WAF.
+- SEO técnico (schema, redirecciones, páginas rápidas) + blog optimizado.
+
+3) ENTREGABLES
+- Diseño UI a medida (Figma) + estilo de marca ligero.
+- Panel para gestionar menú y blog.
+- Motor de reservas con recordatorios por email.
+- Fotografías profesionales (1 sesión) + edición.
+- Dashboard de analítica (GA4 + eventos y embudos).
+- Manual de 15 páginas + sesión de entrenamiento 1h.
+
+4) CRONOGRAMA
+- Semana 1–2: Descubrimiento + UX.
+- Semana 3–5: Diseño UI + contenidos.
+- Semana 6–8: Desarrollo + integraciones.
+- Semana 9: QA, performance y lanzamiento.
+
+5) PRESUPUESTO
+- Diseño/UX/UI: USD 2,100
+- Desarrollo + integraciones: USD 2,900
+- Infraestructura (12 meses): USD 480
+- Fotografía: USD 400
+- Total: USD 5,880
+
+6) EXCLUSIONES
+- App móvil nativa, programa de fidelidad, POS.
+- Traducción profesional completa (incluye base de ES/EN).
+
+7) RIESGOS
+- Complejidad de reservas con picos en fines de semana.
+- Dependencia de contenidos para el blog.
+
+8) KPIs
+- LCP < 1.8s y CLS < 0.1 (Core Web Vitals).
+- 35% de reservas online en 90 días.
+- +50% sesiones orgánicas en 6 meses.

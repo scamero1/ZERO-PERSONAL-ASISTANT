@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+.env.*
+.streamlit/secrets.toml
+dist/
+build/
+.ipynb_checkpoints/
+*.sqlite3
+*.bin
+*.pt
+*.ckpt
+*.gguf
+.DS_Store
+Thumbs.db

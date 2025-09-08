@@ -1,0 +1,40 @@
+PROYECTO: Sitio web para restaurante — Plan ECONÓMICO
+Versión: 1.0
+Fecha: 2025-08-29
+
+1) OBJETIVO
+- Publicar un sitio informativo one-page con menú básico, ubicación y contacto.
+
+2) ALCANCE
+- 1 página (home) con secciones: héroe, menú simple (hasta 20 ítems), mapa, formulario de contacto.
+- 3 revisiones menores.
+- Hosting compartido + certificado SSL básico.
+- Optimización SEO básica (título, meta descripción, sitemap).
+
+3) ENTREGABLES
+- Diseño responsive en plantilla.
+- Integración con WhatsApp y Google Maps.
+- 5 imágenes libres de stock.
+- Manual rápido (PDF de 2 páginas).
+
+4) CRONOGRAMA
+- Semana 1: Recolección de contenidos + plantilla.
+- Semana 2: Maquetación + carga de menú.
+- Semana 3: Pruebas + publicación.
+
+5) PRESUPUESTO
+- Diseño y desarrollo: USD 380
+- Dominio + hosting (1 año): USD 70
+- Total: USD 450
+
+6) EXCLUSIONES
+- Ecommerce, reservas online, multilenguaje, panel admin.
+- Producción de fotos y copywriting extensivo.
+
+7) RIESGOS
+- Demoras en entrega de fotos/menú retrasan publicación.
+- Hosting compartido puede tener picos de latencia.
+
+8) KPIs
+- Tiempo de carga < 2.5s en móvil (Lighthouse).
+- 20% más clics a WhatsApp en 60 días.
