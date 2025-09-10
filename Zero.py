@@ -1,1305 +1,1166 @@
-# Zero_personalizado.py — Chat (Groq) + "Mis archivos" (RAG BM25 interno) + Imagen + Audio + Registro
-# ---------------------------------------------------------------------------------------------------
-# Requisitos (sin OpenAI):
-#   pip install streamlit requests PyPDF2 python-docx pandas openpyxl streamlit-webrtc SpeechRecognition av numpy pillow python-dotenv twilio
-#   (Opcional para OCR local) -> pip install pytesseract
-#   Nota OCR: Instala Tesseract en Windows (ruta típica C:\Program Files\Tesseract-OCR\tesseract.exe) y los idiomas spa/eng.
-#
-# Variables .env (coloca en el mismo directorio):
-#   GROQ_API_KEY=tu_api_key_de_groq
-#   GROQ_TEXT_MODEL=llama-3.3-70b-versatile
-#   GROQ_VISION_MODEL=llama-3.2-11b-vision-preview
+# Zero.py — Versión Groq total (chat + visión) con fix de encoding
+# -------------------------------------------------
+# Requisitos:
+#   - pip install streamlit requests python-dotenv twilio SpeechRecognition av numpy pillow streamlit-webrtc
+#   - Variable de entorno: GROQ_API_KEY
+#   - (Opcional) GROQ_TEXT_MODEL, GROQ_VISION_MODEL
+# -------------------------------------------------
 
-import os
-import io
-import json
-import uuid
-import queue
-import pathlib
-import math
-import requests
-from typing import List, Dict, Any
-from collections import Counter
-from base64 import b64encode
-
-import numpy as np
-import pandas as pd
 import streamlit as st
-from dotenv import load_dotenv
-from PIL import Image
-
-# Audio
-import av
-import speech_recognition as sr
 from streamlit_webrtc import webrtc_streamer, WebRtcMode
-
-# Twilio (opcional)
-from twilio.rest import Client
-
-# Lectura de documentos
-from PyPDF2 import PdfReader          # PDF
-from docx import Document             # DOCX
-
-# Login propio del proyecto (debes tener este módulo en tu proyecto)
+import speech_recognition as sr
+import av
+import numpy as np
+import queue
+from PIL import Image
+import time
 from Login import verificar_login, logout, registrar_usuario
+from base64 import b64encode
+import os
+from twilio.rest import Client
+import uuid
+from dotenv import load_dotenv
+import requests
+import json
 
-# =============================================================================
-# Config inicial
-# =============================================================================
+# Importaciones para el nuevo sistema
+from database import ZeroDatabase
+from file_processor import FileProcessor
+
+# Inicializar base de datos
+db = ZeroDatabase()
+
+# --- Load environment variables ---
 load_dotenv()
 
+# --- CONFIGURACIÓN INICIAL ---
 st.set_page_config(
-    page_title="ZERO - Asistente Virtual (Groq)",
+    page_title="ZERO - Asistente Virtual",
     page_icon="favicon.ico",
     layout="centered",
     initial_sidebar_state="auto"
 )
 
-# =============================================================================
-# Estilos (look&feel)
-# =============================================================================
+# --- GROQ CONFIG ---
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+if not GROQ_API_KEY:
+    st.error("Falta GROQ_API_KEY en tu entorno (.env).")
+API_URL = "https://api.groq.com/openai/v1/chat/completions"
+
+# Modelos (puedes cambiarlos por env si quieres)
+GROQ_TEXT_MODEL = os.getenv("GROQ_TEXT_MODEL", "llama-3.1-8b-instant")
+# Para visión, prueba con alguno de los vision-preview soportados por tu cuenta
+GROQ_VISION_MODEL = os.getenv("GROQ_VISION_MODEL", "llama-3.2-11b-vision-preview")
+
+BASE_HEADERS = {
+    "Authorization": f"Bearer {GROQ_API_KEY}",
+    "Content-Type": "application/json",
+}
+STREAM_HEADERS = {
+    **BASE_HEADERS,
+    "Accept": "text/event-stream",
+}
+
+# --- FIX DE ENCODING ---
+def safe_text(text: str) -> str:
+    """
+    Repara textos que se ven como 'diseÃ±ado' cuando fueron interpretados como latin-1.
+    Si no hay problema, regresa el texto original.
+    """
+    if text is None:
+        return ""
+    if not isinstance(text, str):
+        text = str(text)
+    try:
+        # Si el texto ya está bien, esta operación lanzará error; por eso va en try.
+        return text.encode("latin1").decode("utf-8")
+    except Exception:
+        return text
+
+# --- ESTADOS DE SESIÓN ---
+# Inicializar historial de chat para el usuario actual (solo si está autenticado)
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = {}
+if "current_chat" not in st.session_state:
+    st.session_state.current_chat = str(uuid.uuid4())
+
+if st.session_state.get("autenticado", False) and st.session_state.get("usuario"):
+    usuario_actual = st.session_state.usuario
+    if usuario_actual not in st.session_state.chat_history:
+        st.session_state.chat_history[usuario_actual] = {}
+    if st.session_state.current_chat not in st.session_state.chat_history[usuario_actual]:
+        st.session_state.chat_history[usuario_actual][st.session_state.current_chat] = {
+            "title": "Nuevo chat",
+            "messages": []
+        }
+
+# --- ESTILOS CSS ---
 def load_css():
-    st.markdown("""
+    favicon_path = "favicon.ico"
+    favicon_base64 = ""
+
+    if os.path.exists(favicon_path):
+        with open(favicon_path, "rb") as f:
+            favicon_base64 = b64encode(f.read()).decode()
+
+    st.markdown(f"""
     <style>
-    /* ========== VARIABLES FUTURISTAS ========== */
-    :root {
-        --primary-neon: #00ffff;
-        --secondary-neon: #ff00ff;
-        --accent-electric: #00ff88;
-        --bg-dark: #0a0a0f;
-        --bg-glass: rgba(15, 15, 25, 0.8);
-        --text-bright: #ffffff;
-        --text-glow: #e0e0ff;
-        --hologram-1: linear-gradient(45deg, #00ffff, #ff00ff, #00ff88);
-        --hologram-2: linear-gradient(135deg, #ff00ff, #00ffff, #ffff00);
-        --glass-border: rgba(255, 255, 255, 0.2);
-        --shadow-neon: 0 0 20px rgba(0, 255, 255, 0.5);
-        --font-cyber: 'Orbitron', 'Courier New', monospace;
-        --font-modern: 'Exo 2', 'Arial', sans-serif;
-    }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        
+        :root {{
+            --bg-primary: #000000;
+            --bg-card: #1a1a1a;
+            --bg-sidebar: #111111;
+            --text-primary: #ffffff;
+            --text-secondary: #cccccc;
+            --text-muted: #888888;
+            --purple: #8B5CF6;
+            --purple-hover: #7C3AED;
+            --purple-light: #A78BFA;
+            --border: #333333;
+            --shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            --assistant-bg: #2a2a2a;
+            --assistant-text: #ffffff;
+            --user-bg: #8B5CF6;
+            --user-text: #ffffff;
+            --sidebar-width: 300px;
+        }}
 
-    /* ========== IMPORTAR FUENTES FUTURISTAS ========== */
-    @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Exo+2:wght@300;400;600;700&display=swap');
+        * {{
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }}
+        
+        .stApp {{
+            background-color: var(--bg-primary) !important;
+            font-family: 'Inter', sans-serif;
+            color: var(--text-primary);
+        }}
 
-    /* ========== ANIMACIONES AVANZADAS ========== */
-    @keyframes hologramShift {
-        0% { background-position: 0% 50%; }
-        50% { background-position: 100% 50%; }
-        100% { background-position: 0% 50%; }
-    }
+        .stApp > header {{
+            display: none !important;
+        }}
 
-    @keyframes neonPulse {
-        0%, 100% { 
-            box-shadow: 0 0 5px var(--primary-neon), 0 0 10px var(--primary-neon), 0 0 15px var(--primary-neon);
-            text-shadow: 0 0 5px var(--primary-neon);
-        }
-        50% { 
-            box-shadow: 0 0 10px var(--primary-neon), 0 0 20px var(--primary-neon), 0 0 30px var(--primary-neon);
-            text-shadow: 0 0 10px var(--primary-neon);
-        }
-    }
-
-    @keyframes dataStream {
-        0% { transform: translateY(100vh) rotate(0deg); opacity: 0; }
-        10% { opacity: 1; }
-        90% { opacity: 1; }
-        100% { transform: translateY(-100vh) rotate(360deg); opacity: 0; }
-    }
-
-    @keyframes glitchEffect {
-        0%, 100% { transform: translate(0); }
-        20% { transform: translate(-2px, 2px); }
-        40% { transform: translate(-2px, -2px); }
-        60% { transform: translate(2px, 2px); }
-        80% { transform: translate(2px, -2px); }
-    }
-
-    @keyframes matrixRain {
-        0% { transform: translateY(-100vh); }
-        100% { transform: translateY(100vh); }
-    }
-
-    /* ========== FONDO FUTURISTA CON EFECTOS ========== */
-    .stApp {
-        background: var(--bg-dark);
-        background-image: 
-            radial-gradient(circle at 20% 80%, rgba(0, 255, 255, 0.1) 0%, transparent 50%),
-            radial-gradient(circle at 80% 20%, rgba(255, 0, 255, 0.1) 0%, transparent 50%),
-            radial-gradient(circle at 40% 40%, rgba(0, 255, 136, 0.1) 0%, transparent 50%);
-        position: relative;
-        overflow-x: hidden;
-    }
-
-    .stApp::before {
-        content: '';
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: 
-            linear-gradient(90deg, transparent 98%, rgba(0, 255, 255, 0.03) 100%),
-            linear-gradient(0deg, transparent 98%, rgba(255, 0, 255, 0.03) 100%);
-        background-size: 50px 50px;
-        animation: dataStream 20s linear infinite;
-        pointer-events: none;
-        z-index: 1;
-    }
-
-    /* ========== OCULTAR ELEMENTOS STREAMLIT ========== */
-    .stDeployButton, #MainMenu, footer, header {
-        visibility: hidden !important;
-    }
-
-    /* ========== CONTENEDOR PRINCIPAL GLASSMORPHISM ========== */
-    .main .block-container {
-        background: var(--bg-glass);
-        backdrop-filter: blur(20px);
-        border: 1px solid var(--glass-border);
-        border-radius: 20px;
-        padding: 2rem;
-        margin: 1rem;
-        box-shadow: var(--shadow-neon);
-        position: relative;
-        z-index: 10;
-    }
-
-    .main .block-container::before {
-        content: '';
-        position: absolute;
-        top: -2px;
-        left: -2px;
-        right: -2px;
-        bottom: -2px;
-        background: var(--hologram-1);
-        background-size: 400% 400%;
-        animation: hologramShift 3s ease infinite;
-        border-radius: 22px;
-        z-index: -1;
-    }
-
-    /* ========== SIDEBAR FUTURISTA ========== */
-    .css-1d391kg {
-        background: linear-gradient(180deg, rgba(10, 10, 15, 0.95) 0%, rgba(20, 20, 30, 0.95) 100%);
-        backdrop-filter: blur(15px);
-        border-right: 2px solid var(--primary-neon);
-        box-shadow: 5px 0 15px rgba(0, 255, 255, 0.3);
-    }
-
-    .sidebar-title {
-        font-family: var(--font-cyber);
-        font-size: 1.8rem;
-        font-weight: 900;
-        background: var(--hologram-2);
-        background-size: 200% 200%;
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-        animation: hologramShift 2s ease infinite, neonPulse 2s ease-in-out infinite;
-        text-align: center;
-        margin-bottom: 1.5rem;
-        text-transform: uppercase;
-        letter-spacing: 3px;
-    }
-
-    .sidebar-section-title {
-        font-family: var(--font-modern);
-        font-size: 1rem;
-        font-weight: 600;
-        color: var(--accent-electric);
-        text-shadow: 0 0 10px var(--accent-electric);
-        margin: 1.5rem 0 0.8rem 0;
-        padding: 0.5rem;
-        border-left: 3px solid var(--accent-electric);
-        background: rgba(0, 255, 136, 0.1);
-        border-radius: 0 10px 10px 0;
-    }
-
-    /* ========== BOTONES FUTURISTAS ========== */
-    .stButton > button {
-        background: linear-gradient(45deg, var(--primary-neon), var(--secondary-neon));
-        color: var(--bg-dark);
-        border: none;
-        border-radius: 15px;
-        padding: 0.8rem 1.5rem;
-        font-family: var(--font-modern);
-        font-weight: 600;
-        font-size: 0.9rem;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-        cursor: pointer;
-        transition: all 0.3s ease;
-        position: relative;
-        overflow: hidden;
-        box-shadow: 0 4px 15px rgba(0, 255, 255, 0.4);
-    }
-
-    .stButton > button::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: -100%;
-        width: 100%;
-        height: 100%;
-        background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
-        transition: left 0.5s;
-    }
-
-    .stButton > button:hover {
-        transform: translateY(-2px) scale(1.05);
-        box-shadow: 0 8px 25px rgba(0, 255, 255, 0.6);
-        animation: neonPulse 1s ease-in-out infinite;
-    }
-
-    .stButton > button:hover::before {
-        left: 100%;
-    }
-
-    /* ========== CHAT CONTAINER FUTURISTA ========== */
-    .chat-container {
-        background: rgba(15, 15, 25, 0.6);
-        backdrop-filter: blur(10px);
-        border: 1px solid var(--glass-border);
-        border-radius: 20px;
-        padding: 1.5rem;
-        margin: 1rem 0;
-        min-height: 400px;
-        max-height: 600px;
-        overflow-y: auto;
-        position: relative;
-    }
-
-    .chat-container::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        height: 2px;
-        background: var(--hologram-1);
-        background-size: 200% 200%;
-        animation: hologramShift 2s linear infinite;
-    }
-
-    /* ========== MENSAJES DEL CHAT ========== */
-    .message {
-        margin: 1rem 0;
-        animation: fadeInUp 0.5s ease-out;
-    }
-
-    .user-message {
-        background: linear-gradient(135deg, rgba(0, 255, 255, 0.2), rgba(0, 255, 136, 0.2));
-        color: var(--text-bright);
-        padding: 1rem 1.5rem;
-        border-radius: 20px 20px 5px 20px;
-        border: 1px solid var(--primary-neon);
-        margin-left: 20%;
-        font-family: var(--font-modern);
-        box-shadow: 0 4px 15px rgba(0, 255, 255, 0.3);
-        position: relative;
-    }
-
-    .user-message::before {
-        content: '👤';
-        position: absolute;
-        top: -10px;
-        right: -10px;
-        background: var(--primary-neon);
-        color: var(--bg-dark);
-        border-radius: 50%;
-        width: 25px;
-        height: 25px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 0.8rem;
-    }
-
-    .assistant-message {
-        background: linear-gradient(135deg, rgba(255, 0, 255, 0.2), rgba(255, 255, 0, 0.1));
-        color: var(--text-glow);
-        padding: 1rem 1.5rem;
-        border-radius: 20px 20px 20px 5px;
-        border: 1px solid var(--secondary-neon);
-        margin-right: 20%;
-        font-family: var(--font-modern);
-        box-shadow: 0 4px 15px rgba(255, 0, 255, 0.3);
-        position: relative;
-    }
-
-    .assistant-message::before {
-        content: '🤖';
-        position: absolute;
-        top: -10px;
-        left: -10px;
-        background: var(--secondary-neon);
-        color: var(--bg-dark);
-        border-radius: 50%;
-        width: 25px;
-        height: 25px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 0.8rem;
-        animation: neonPulse 2s ease-in-out infinite;
-    }
-
-    /* ========== INPUTS FUTURISTAS ========== */
-    .stTextInput > div > div > input {
-        background: rgba(15, 15, 25, 0.8);
-        border: 2px solid var(--primary-neon);
-        border-radius: 15px;
-        color: var(--text-bright);
-        font-family: var(--font-modern);
-        padding: 1rem;
-        font-size: 1rem;
-        transition: all 0.3s ease;
-    }
-
-    .stTextInput > div > div > input:focus {
-        border-color: var(--accent-electric);
-        box-shadow: 0 0 20px rgba(0, 255, 136, 0.5);
-        background: rgba(0, 255, 136, 0.1);
-    }
-
-    /* ========== CHAT INPUT ESPECIAL ========== */
-    .stChatInput > div {
-        background: rgba(15, 15, 25, 0.9);
-        border: 2px solid var(--primary-neon);
-        border-radius: 25px;
-        backdrop-filter: blur(10px);
-    }
-
-    .stChatInput input {
-        background: transparent;
-        color: var(--text-bright);
-        font-family: var(--font-modern);
-        font-size: 1rem;
-        border: none;
-    }
-
-    /* ========== LISTA DE CHATS ========== */
-    .chat-list {
-        max-height: 300px;
-        overflow-y: auto;
-        padding: 0.5rem;
-    }
-
-    .chat-item {
-        background: rgba(0, 255, 255, 0.1);
-        border: 1px solid rgba(0, 255, 255, 0.3);
-        border-radius: 10px;
-        padding: 0.8rem;
-        margin: 0.5rem 0;
-        cursor: pointer;
-        transition: all 0.3s ease;
-        font-family: var(--font-modern);
-    }
-
-    .chat-item:hover {
-        background: rgba(0, 255, 255, 0.2);
-        border-color: var(--primary-neon);
-        transform: translateX(5px);
-        box-shadow: 0 4px 15px rgba(0, 255, 255, 0.4);
-    }
-
-    .chat-preview {
-        font-size: 0.8rem;
-        color: var(--text-glow);
-        opacity: 0.8;
-        margin-top: 0.3rem;
-    }
-
-    /* ========== TÍTULOS FUTURISTAS ========== */
-    h1, h2, h3 {
-        font-family: var(--font-cyber);
-        background: var(--hologram-1);
-        background-size: 200% 200%;
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-        animation: hologramShift 3s ease infinite;
-        text-align: center;
-        margin: 1.5rem 0;
-        text-transform: uppercase;
-        letter-spacing: 2px;
-    }
-
-    /* ========== SLIDERS Y CONTROLES ========== */
-    .stSlider > div > div > div {
-        background: var(--primary-neon);
-    }
-
-    .stToggle > div {
-        background: rgba(0, 255, 255, 0.2);
-        border: 1px solid var(--primary-neon);
-        border-radius: 20px;
-    }
-
-    /* ========== SELECTBOX FUTURISTA ========== */
-    .stSelectbox > div > div {
-        background: rgba(15, 15, 25, 0.8);
-        border: 2px solid var(--primary-neon);
-        border-radius: 15px;
-        color: var(--text-bright);
-    }
-
-    /* ========== RADIO BUTTONS ========== */
-    .stRadio > div {
-        background: rgba(15, 15, 25, 0.6);
-        border-radius: 15px;
-        padding: 1rem;
-        border: 1px solid var(--glass-border);
-    }
-
-    .stRadio label {
-        color: var(--text-bright);
-        font-family: var(--font-modern);
-        padding: 0.5rem;
-        border-radius: 8px;
-        transition: all 0.3s ease;
-    }
-
-    .stRadio label:hover {
-        background: rgba(0, 255, 255, 0.1);
-        color: var(--primary-neon);
-    }
-
-    /* ========== FILE UPLOADER ========== */
-    .stFileUploader > div {
-        background: rgba(15, 15, 25, 0.8);
-        border: 2px dashed var(--accent-electric);
-        border-radius: 15px;
-        padding: 2rem;
-        text-align: center;
-        transition: all 0.3s ease;
-    }
-
-    .stFileUploader > div:hover {
-        border-color: var(--primary-neon);
-        background: rgba(0, 255, 255, 0.1);
-        box-shadow: 0 4px 20px rgba(0, 255, 255, 0.3);
-    }
-
-    /* ========== ALERTAS Y NOTIFICACIONES ========== */
-    .stSuccess {
-        background: linear-gradient(135deg, rgba(0, 255, 136, 0.2), rgba(0, 255, 255, 0.1));
-        border: 1px solid var(--accent-electric);
-        border-radius: 15px;
-        color: var(--accent-electric);
-        font-family: var(--font-modern);
-    }
-
-    .stError {
-        background: linear-gradient(135deg, rgba(255, 0, 100, 0.2), rgba(255, 0, 255, 0.1));
-        border: 1px solid #ff0066;
-        border-radius: 15px;
-        color: #ff0066;
-        font-family: var(--font-modern);
-    }
-
-    .stInfo {
-        background: linear-gradient(135deg, rgba(0, 255, 255, 0.2), rgba(255, 0, 255, 0.1));
-        border: 1px solid var(--primary-neon);
-        border-radius: 15px;
-        color: var(--primary-neon);
-        font-family: var(--font-modern);
-    }
-
-    /* ========== DISCLAIMER FUTURISTA ========== */
-    .disclaimer {
-        text-align: center;
-        font-size: 0.8rem;
-        color: var(--text-glow);
-        opacity: 0.7;
-        margin-top: 1rem;
-        padding: 0.5rem;
-        border-top: 1px solid rgba(0, 255, 255, 0.3);
-        font-family: var(--font-modern);
-        font-style: italic;
-    }
-
-    /* ========== EFECTOS ESPECIALES ========== */
-    .matrix-bg {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        pointer-events: none;
-        z-index: 0;
-        opacity: 0.1;
-    }
-
-    .matrix-char {
-        position: absolute;
-        color: var(--accent-electric);
-        font-family: 'Courier New', monospace;
-        font-size: 14px;
-        animation: matrixRain 10s linear infinite;
-    }
-
-    /* ========== SCROLLBAR FUTURISTA ========== */
-    ::-webkit-scrollbar {
-        width: 8px;
-    }
-
-    ::-webkit-scrollbar-track {
-        background: rgba(15, 15, 25, 0.5);
-        border-radius: 10px;
-    }
-
-    ::-webkit-scrollbar-thumb {
-        background: linear-gradient(180deg, var(--primary-neon), var(--secondary-neon));
-        border-radius: 10px;
-        box-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
-    }
-
-    ::-webkit-scrollbar-thumb:hover {
-        background: linear-gradient(180deg, var(--accent-electric), var(--primary-neon));
-    }
-
-    /* ========== ANIMACIONES DE ENTRADA ========== */
-    @keyframes fadeInUp {
-        from {
-            opacity: 0;
-            transform: translateY(30px);
-        }
-        to {
-            opacity: 1;
-            transform: translateY(0);
-        }
-    }
-
-    /* ========== RESPONSIVE DESIGN ========== */
-    @media (max-width: 768px) {
-        .main .block-container {
-            margin: 0.5rem;
+        .main {{
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            max-width: 800px;
+            margin: 0 auto;
             padding: 1rem;
-        }
+        }}
         
-        .sidebar-title {
-            font-size: 1.4rem;
-        }
+        .main .block-container {{
+            background-color: var(--bg-primary);
+            padding: 1rem;
+        }}
+
+        .sidebar .sidebar-content {{
+            background-color: var(--bg-sidebar) !important;
+            color: var(--text-primary);
+            width: var(--sidebar-width);
+            border-right: 1px solid var(--border);
+            padding: 1rem;
+        }}
         
-        .user-message, .assistant-message {
-            margin-left: 5%;
-            margin-right: 5%;
-        }
-    }
+        .css-1d391kg {{
+            background-color: var(--bg-sidebar) !important;
+        }}
 
-    /* ========== EFECTOS HOVER GLOBALES ========== */
-    * {
-        transition: all 0.3s ease;
-    }
+        .sidebar-title {{
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--purple);
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid var(--purple);
+        }}
 
-    /* ========== LOADING SPINNER FUTURISTA ========== */
-    .stSpinner > div {
-        border-color: var(--primary-neon) transparent var(--secondary-neon) transparent;
-        animation: spin 1s linear infinite, neonPulse 2s ease-in-out infinite;
-    }
+        .sidebar-section {{
+            margin-bottom: 1.5rem;
+        }}
 
-    @keyframes spin {
-        0% { transform: rotate(0deg); }
-        100% { transform: rotate(360deg); }
-    }
+        .sidebar-section-title {{
+            font-weight: 600;
+            color: var(--purple);
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }}
+
+        .chat-container {{
+            max-height: 65vh;
+            overflow-y: auto;
+            padding: 1rem 0.5rem;
+            margin-bottom: 1rem;
+            background-color: var(--bg-primary);
+            border-radius: 8px;
+            scrollbar-width: thin;
+            scrollbar-color: var(--purple) var(--bg-primary);
+        }}
+
+        .chat-container::-webkit-scrollbar {{
+            width: 6px;
+        }}
+
+        .chat-container::-webkit-scrollbar-track {{
+            background: var(--bg-primary);
+        }}
+
+        .chat-container::-webkit-scrollbar-thumb {{
+            background-color: var(--purple);
+            border-radius: 3px;
+        }}
+
+        .message {{
+            margin-bottom: 1.25rem;
+            animation: fadeIn 0.3s ease-out;
+            display: flex;
+            flex-direction: column;
+        }}
+
+        .assistant-message {{
+            background-color: var(--assistant-bg);
+            color: var(--assistant-text);
+            padding: 0.8rem 1.2rem;
+            border-radius: 18px 18px 18px 4px;
+            max-width: 85%;
+            align-self: flex-start;
+            word-wrap: break-word;
+            text-align: left;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            margin-right: auto;
+        }}
+
+        .user-message {{
+            background-color: var(--user-bg);
+            color: var(--user-text);
+            padding: 0.8rem 1.2rem;
+            border-radius: 18px 18px 4px 18px;
+            max-width: 85%;
+            align-self: flex-end;
+            word-wrap: break-word;
+            text-align: left;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            margin-left: auto;
+        }}
+
+        @keyframes fadeIn {{
+            from {{ opacity: 0; transform: translateY(10px); }}
+            to {{ opacity: 1; transform: translateY(0); }}
+        }}
+
+        .stTextInput>div>div>input {{
+            border-radius: 8px;
+            padding: 12px 16px;
+            border: 1px solid var(--border);
+            box-shadow: none;
+            background-color: var(--bg-card) !important;
+            color: var(--text-primary) !important;
+        }}
+        
+        .stTextInput>label {{
+            color: var(--text-primary) !important;
+        }}
+
+        .stTextInput>div>div>input:focus {{
+            border-color: var(--purple) !important;
+            box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.2) !important;
+        }}
+
+        .stButton>button {{
+            border-radius: 8px;
+            padding: 10px 20px;
+            font-weight: 600;
+            transition: all 0.2s;
+            background-color: var(--purple) !important;
+            color: var(--text-primary) !important;
+            border: none;
+        }}
+
+        .stButton>button:hover {{
+            background-color: var(--purple-hover) !important;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+        }}
+
+        .logout-btn {{
+            background-color: transparent !important;
+            color: var(--purple) !important;
+            border: 1px solid var(--purple) !important;
+            margin-top: 1rem;
+        }}
+
+        .logout-btn:hover {{
+            background-color: rgba(139, 92, 246, 0.1) !important;
+        }}
+
+        .spinner {{
+            animation: spin 1s linear infinite;
+            display: inline-block;
+        }}
+
+        @keyframes spin {{
+            from {{ transform: rotate(0deg); }}
+            to {{ transform: rotate(360deg); }}
+        }}
+
+        .block-container {{
+            padding-top: 0 !important;
+        }}
+
+        .disclaimer {{
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            text-align: center;
+            margin-top: 0.5rem;
+            padding: 0.5rem;
+        }}
+
+        .chat-list {{
+            max-height: 40vh;
+            overflow-y: auto;
+            margin-bottom: 1rem;
+        }}
+
+        .chat-item {{
+            padding: 0.5rem;
+            margin: 0.25rem 0;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            background-color: var(--bg-card);
+            border: 1px solid var(--border);
+        }}
+
+        .chat-item:hover {{
+            background-color: rgba(139, 92, 246, 0.1);
+            border-color: var(--purple);
+        }}
+
+        .chat-item.active {{
+            background-color: var(--purple);
+            color: var(--text-primary);
+            border-color: var(--purple);
+        }}
+
+        .chat-preview {{
+            font-size: 0.8rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            color: var(--text-secondary);
+        }}
+
+        .chat-item.active .chat-preview {{
+            color: rgba(255,255,255,0.8);
+        }}
+
+        /* Estilos para archivos */
+        .file-item {{
+            padding: 0.75rem;
+            margin: 0.5rem 0;
+            border-radius: 8px;
+            background-color: var(--bg-card);
+            border: 1px solid var(--border);
+            transition: all 0.2s;
+        }}
+
+        .file-item:hover {{
+            border-color: var(--purple);
+            background-color: rgba(139, 92, 246, 0.05);
+        }}
+
+        .file-name {{
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 0.25rem;
+        }}
+
+        .file-info {{
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }}
+
+        .file-actions {{
+            margin-top: 0.5rem;
+            display: flex;
+            gap: 0.5rem;
+        }}
+
+        .file-actions button {{
+            font-size: 0.8rem !important;
+            padding: 0.25rem 0.5rem !important;
+        }}
+
+        @media (max-width: 768px) {{
+            .sidebar .sidebar-content {{ width: 100%; }}
+            .chat-container {{ max-height: 60vh; }}
+            .assistant-message, .user-message {{ max-width: 90%; }}
+        }}
     </style>
+
+    <link rel="icon" href="data:image/x-icon;base64,{favicon_base64}" type="image/x-icon">
     """, unsafe_allow_html=True)
 
 load_css()
 
-# =============================================================================
-# Servicios externos: Groq y Twilio
-# =============================================================================
-GROQ_API_KEY = os.getenv("GROQ_API_KEY", "").strip()
-GROQ_TEXT_MODEL = os.getenv("GROQ_TEXT_MODEL", "llama-3.3-70b-versatile")
-GROQ_VISION_MODEL = os.getenv("GROQ_VISION_MODEL", "llama-3.2-11b-vision-preview")
-
-if not GROQ_API_KEY:
-    st.error("Falta GROQ_API_KEY en el .env")
-    st.stop()
-
-# Cliente Twilio opcional
+# --- INICIALIZACIÓN DE SERVICIOS ---
+# Twilio (para verificación SMS)
 try:
-    twilio_client = Client(os.getenv("TWILIO_ACCOUNT_SID"), os.getenv("TWILIO_AUTH_TOKEN"))
+    twilio_client = Client(
+        os.getenv("TWILIO_ACCOUNT_SID"),
+        os.getenv("TWILIO_AUTH_TOKEN")
+    )
 except Exception as e:
     st.warning(f"No se pudo inicializar Twilio: {e}")
 
-# =============================================================================
-# Estado de sesión
-# =============================================================================
-def init_session():
+# --- INICIALIZACIÓN DE ESTADO ---
+def initialize_session_state():
     if "autenticado" not in st.session_state:
         st.session_state.autenticado = False
     if "usuario" not in st.session_state:
         st.session_state.usuario = None
     if "rol" not in st.session_state:
         st.session_state.rol = None
+    
     if "messages" not in st.session_state:
         st.session_state.messages = []
     if "thinking" not in st.session_state:
         st.session_state.thinking = False
+    
+    if "sidebar_collapsed" not in st.session_state:
+        st.session_state.sidebar_collapsed = False
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = {}
     if "current_chat" not in st.session_state:
         st.session_state.current_chat = str(uuid.uuid4())
 
-init_session()
+initialize_session_state()
 
-# =============================================================================
-# Personalidad del asistente
-# =============================================================================
-def system_prompt_text() -> str:
-    return (
-        "Eres ZERO, un asistente digital especializado en la optimización de búsqueda y análisis de información "
-        "para facilitar la accesibilidad y distribución de datos. Sé claro, profesional y útil. "
-        "Cuando recibas CONTEXT_START/CONTEXT_END, usa ese contexto y cita el archivo cuando corresponda."
-    )
+# --- GROQ HELPERS ---
+def _system_prompt():
+    # Crear prompt personalizado basado en el contexto del usuario
+    base_prompt = "Eres un asistente AI llamado Zero. Sé conciso, profesional y útil."
+    
+    # Agregar contexto de archivos si existe
+    if st.session_state.get("user_context"):
+        context_info = "\n\nContexto personalizado del usuario:\n"
+        for ctx in st.session_state.user_context[-5:]:  # Últimos 5 contextos
+            context_info += f"- {ctx['context_key']}: {ctx['context_value'][:200]}...\n"
+        base_prompt += context_info
+    
+    return {"role": "system", "content": base_prompt}
 
-# =============================================================================
-# Groq API helpers (chat y visión)
-# =============================================================================
-def groq_chat_completion(messages: List[Dict[str, Any]], max_tokens: int = 1200, temperature: float = 0.7) -> str:
+def groq_chat_stream(history_messages, *, model=None, max_tokens=1200, temperature=0.7):
     """
-    Llama a Groq /openai/v1/chat/completions (no streaming).
-    messages: [{"role":"system"/"user"/"assistant","content":str}, ...]
+    Streaming SSE con requests.iter_lines() (sin SDK extra).
+    Devuelve un generador de "delta" (fragmentos de texto) como en OpenAI.
     """
-    url = "https://api.groq.com/openai/v1/chat/completions"
-    headers = {"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"}
+    m = model or GROQ_TEXT_MODEL
     payload = {
-        "model": GROQ_TEXT_MODEL,
-        "messages": messages,
+        "model": m,
+        "messages": [_system_prompt()] + history_messages,
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+        "stream": True,
+    }
+    try:
+        with requests.post(API_URL, headers=STREAM_HEADERS, json=payload, stream=True, timeout=300) as r:
+            r.raise_for_status()
+            for raw in r.iter_lines(decode_unicode=True):
+                if not raw:
+                    continue
+                if raw.startswith("data: "):
+                    data = raw[6:]
+                    if data.strip() == "[DONE]":
+                        break
+                    try:
+                        obj = json.loads(data)
+                        delta = obj["choices"][0]["delta"].get("content")
+                        if delta:
+                            # FIX ENCODING por si llega interpretado raro
+                            yield safe_text(delta)
+                    except Exception:
+                        continue
+    except requests.HTTPError as http_err:
+        yield safe_text(f"⚠️ Error HTTP: {http_err}")
+    except Exception as e:
+        yield safe_text(f"⚠️ Error en streaming: {e}")
+
+def groq_chat_nonstream(history_messages, *, model=None, max_tokens=1200, temperature=0.7):
+    """
+    Llamada normal (no streaming) al endpoint OpenAI-compatible de Groq.
+    """
+    m = model or GROQ_TEXT_MODEL
+    payload = {
+        "model": m,
+        "messages": [_system_prompt()] + history_messages,
         "max_tokens": max_tokens,
         "temperature": temperature,
     }
     try:
-        r = requests.post(url, headers=headers, json=payload, timeout=90)
-        r.raise_for_status()
+        r = requests.post(API_URL, headers=BASE_HEADERS, json=payload, timeout=90)
+        if r.status_code != 200:
+            return safe_text(f"⚠️ Error {r.status_code}: {r.text}")
         data = r.json()
-        return (data["choices"][0]["message"]["content"] or "").strip()
+        return safe_text(data["choices"][0]["message"]["content"])
     except Exception as e:
-        return f"(Error con Groq chat: {e})"
+        return safe_text(f"⚠️ Error en la conexión: {e}")
 
-def groq_vision_ocr(image_bytes: bytes) -> str:
-    """
-    OCR con Groq visión: devuelve SOLO el texto extraído.
-    """
-    url = "https://api.groq.com/openai/v1/chat/completions"
-    headers = {"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"}
-    b64 = b64encode(image_bytes).decode("utf-8")
-    payload = {
-        "model": GROQ_VISION_MODEL,
-        "temperature": 0.0,
-        "max_tokens": 1200,
-        "messages": [
-            {"role": "system", "content": "Eres un OCR. Devuelve SOLO el texto legible de la imagen, sin comentarios."},
-            {
-                "role": "user",
-                "content": [
-                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}},
-                    {"type": "text", "text": "Extrae el TEXTO TAL CUAL se lee en la imagen."}
-                ]
-            }
-        ]
-    }
-    try:
-        r = requests.post(url, headers=headers, json=payload, timeout=90)
-        r.raise_for_status()
-        data = r.json()
-        return (data["choices"][0]["message"]["content"] or "").strip()
-    except Exception:
-        return ""
-
-# =============================================================================
-# UI helpers de chat
-# =============================================================================
+# --- FUNCIONES UTILITARIAS UI ---
 def display_message(role, content):
+    """Muestra un mensaje en el chat con el estilo adecuado."""
     if role == "assistant":
-        clean = str(content).replace("Zero:", "").strip()
-        st.markdown(f"<div class='message'><div class='assistant-message'>{clean}</div></div>", unsafe_allow_html=True)
+        clean_content = safe_text(str(content)).replace("Zero:", "").strip()
+        st.markdown(
+            f"<div class='message'><div class='assistant-message'>{clean_content}</div></div>",
+            unsafe_allow_html=True,
+        )
     else:
-        st.markdown(f"<div class='message'><div class='user-message'>{content}</div></div>", unsafe_allow_html=True)
+        st.markdown(
+            f"<div class='message'><div class='user-message'>{safe_text(str(content))}</div></div>",
+            unsafe_allow_html=True,
+        )
 
 def save_current_chat():
-    if st.session_state.messages and "usuario" in st.session_state:
-        first = st.session_state.messages[0]["content"] if st.session_state.messages else "Nuevo chat"
-        title = first[:30] + "..." if len(first) > 30 else first
-        st.session_state.chat_history.setdefault(st.session_state.usuario, {})
+    """Guarda el chat actual en el historial."""
+    if st.session_state.messages and st.session_state.get("usuario") and st.session_state.get("user_id"):
+        first_message = st.session_state.messages[0]["content"] if st.session_state.messages else "Nuevo chat"
+        title = first_message[:30] + "..." if len(first_message) > 30 else first_message
+        
+        # Actualizar en session_state
         st.session_state.chat_history[st.session_state.usuario][st.session_state.current_chat] = {
-            "title": title, "messages": st.session_state.messages.copy()
+            "title": safe_text(title),
+            "messages": st.session_state.messages.copy(),
         }
+        
+        # Guardar en base de datos
+        db.update_chat_title(st.session_state.current_chat, safe_text(title))
+        
+        # Guardar mensajes nuevos
+        for message in st.session_state.messages:
+            db.add_message(
+                st.session_state.current_chat,
+                message["role"],
+                message["content"]
+            )
 
 def load_chat(chat_id):
+    """Carga un chat del historial."""
     if "usuario" in st.session_state and chat_id in st.session_state.chat_history.get(st.session_state.usuario, {}):
         st.session_state.current_chat = chat_id
         st.session_state.messages = st.session_state.chat_history[st.session_state.usuario][chat_id]["messages"].copy()
         st.rerun()
 
-# =============================================================================
-# ========== RAG por usuario (BM25 interno + almacenamiento local) ==========
-# =============================================================================
-def _user_root() -> pathlib.Path:
-    user = st.session_state.get("usuario", "anon")
-    root = pathlib.Path("storage") / user
-    root.mkdir(parents=True, exist_ok=True)
-    (root / "docs").mkdir(exist_ok=True)
-    (root / "index").mkdir(exist_ok=True)
-    return root
+# --- BARRA LATERAL MEJORADA ---
+def create_sidebar():
+    """Crea la barra lateral con navegación y gestión de archivos"""
+    # Título de la barra lateral
+    st.markdown('<div class="sidebar-title">ZERO - Asistente Virtual</div>', unsafe_allow_html=True)
 
-def _index_path() -> pathlib.Path:
-    return _user_root() / "index" / "bm25_index.json"
+    # Saludo personalizado
+    usuario_nombre = st.session_state.get("usuario", "Usuario")
+    st.markdown(f'<div style="margin-bottom: 1rem;">Hola, <strong>{usuario_nombre}</strong></div>', unsafe_allow_html=True)
 
-def _load_index() -> Dict[str, Any]:
-    p = _index_path()
-    if not p.exists():
-        return {"docs": [], "chunks": [], "tokens": []}
-    try:
-        return json.loads(p.read_text(encoding="utf-8"))
-    except Exception:
-        return {"docs": [], "chunks": [], "tokens": []}
+    # Lista de chats anteriores
+    st.markdown('<div class="sidebar-section">', unsafe_allow_html=True)
+    st.markdown('<div class="sidebar-section-title">💬 Chats anteriores</div>', unsafe_allow_html=True)
+    st.markdown('<div class="chat-list">', unsafe_allow_html=True)
 
-def _save_index(idx: Dict[str, Any]) -> None:
-    _index_path().write_text(json.dumps(idx, ensure_ascii=False), encoding="utf-8")
-
-def _simple_tokenize(txt: str) -> List[str]:
-    return [t for t in "".join(ch if ch.isalnum() or ch.isspace() else " " for ch in txt.lower()).split() if t]
-
-# --- Lectura de archivos ---
-def _read_pdf(file_bytes: bytes) -> str:
-    reader = PdfReader(io.BytesIO(file_bytes))
-    pages = []
-    for p in reader.pages:
+    # Renderizar chats del usuario actual
+    if st.session_state.get("user_id"):
         try:
-            pages.append(p.extract_text() or "")
-        except Exception:
-            continue
-    return "\n".join(pages)
-
-def _read_docx(file_bytes: bytes) -> str:
-    doc = Document(io.BytesIO(file_bytes))
-    parts = [p.text for p in doc.paragraphs if p.text]
-    for table in doc.tables:
-        for row in table.rows:
-            for cell in row.cells:
-                t = cell.text.strip()
-                if t:
-                    parts.append(t)
-    return "\n".join(parts)
-
-def _read_pptx(file_bytes: bytes) -> str:
-    """
-    Extrae texto de .pptx leyendo los XML internos (sin python-pptx).
-    Captura títulos, cuadros de texto y celdas de tablas básicas.
-    """
-    import zipfile
-    from xml.etree import ElementTree as ET
-
-    parts = []
-    try:
-        with zipfile.ZipFile(io.BytesIO(file_bytes)) as z:
-            slide_names = sorted([n for n in z.namelist() if n.startswith("ppt/slides/slide") and n.endswith(".xml")])
-            ns = {
-                "a": "http://schemas.openxmlformats.org/drawingml/2006/main",
-                "p": "http://schemas.openxmlformats.org/presentationml/2006/main",
-                "r": "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
-            }
-            for sname in slide_names:
-                try:
-                    root = ET.fromstring(z.read(sname))
-                    for tnode in root.findall(".//a:t", ns):
-                        txt = (tnode.text or "").strip()
-                        if txt:
-                            parts.append(txt)
-                except Exception:
-                    continue
-    except Exception:
-        return ""
-    return "\n".join(parts)
-
-def _read_excel(file_bytes: bytes, filename: str) -> str:
-    # Lee todas las hojas y concatena en texto tipo CSV
-    try:
-        xls = pd.ExcelFile(io.BytesIO(file_bytes))
-        parts = []
-        for sheet in xls.sheet_names:
-            df = xls.parse(sheet)
-            parts.append(f"--- Hoja: {sheet} ---")
-            parts.extend(["\t".join(map(lambda x: "" if pd.isna(x) else str(x), row)) for row in df.astype(str).values.tolist()])
-        return "\n".join(parts)
-    except Exception:
-        try:
-            df = pd.read_excel(io.BytesIO(file_bytes), sheet_name=None)
-            parts = []
-            for sheet, sdf in df.items():
-                parts.append(f"--- Hoja: {sheet} ---")
-                parts.extend(["\t".join(map(lambda x: "" if pd.isna(x) else str(x), row)) for row in sdf.astype(str).values.tolist()])
-            return "\n".join(parts)
-        except Exception:
-            return ""
-
-def _preprocess_image_for_ocr(img: Image.Image) -> Image.Image:
-    from PIL import ImageFilter, ImageOps
-    w, h = img.size
-    scale = 2 if max(w, h) < 1600 else 1
-    if scale > 1:
-        img = img.resize((w * scale, h * scale))
-    img = ImageOps.grayscale(img)
-    img = ImageOps.autocontrast(img)
-    img = img.filter(ImageFilter.MedianFilter(size=3))
-    try:
-        arr = np.array(img)
-        thr = int(arr.mean())
-        bw = (arr > thr).astype(np.uint8) * 255
-        img = Image.fromarray(bw)
-    except Exception:
-        pass
-    img = img.filter(ImageFilter.UnsharpMask(radius=1.0, percent=150, threshold=3))
-    return img
-
-def _try_init_tesseract():
-    try:
-        import pytesseract
-        try:
-            _ = pytesseract.get_tesseract_version()
-            return pytesseract
-        except Exception:
-            pass
-        common_paths = [
-            r"C:\Program Files\Tesseract-OCR\tesseract.exe",
-            r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
-        ]
-        for p in common_paths:
-            if os.path.exists(p):
-                pytesseract.pytesseract.tesseract_cmd = p
-                _ = pytesseract.get_tesseract_version()
-                return pytesseract
-        return None
-    except Exception:
-        return None
-
-def _ocr_with_tesseract(image_bytes: bytes, lang_hint: str = "spa+eng") -> str:
-    pytesseract = _try_init_tesseract()
-    if not pytesseract:
-        return ""
-    try:
-        img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-        img = _preprocess_image_for_ocr(img)
-        cfg = r"--oem 3 --psm 6"
-        text = pytesseract.image_to_string(img, lang=lang_hint, config=cfg) or ""
-        if len(text.strip()) < 8:
-            try:
-                osd = pytesseract.image_to_osd(img)
-                rot = 0
-                for line in osd.splitlines():
-                    if "Rotate:" in line:
-                        rot = int(line.split(":")[1].strip())
-                        break
-                if rot in (90, 180, 270):
-                    img = img.rotate(360 - rot, expand=True)
-                    text2 = pytesseract.image_to_string(img, lang=lang_hint, config=cfg) or ""
-                    if len(text2.strip()) > len(text.strip()):
-                        text = text2
-            except Exception:
-                pass
-        return text.strip()
-    except Exception:
-        return ""
-
-def _ocr_with_groq(image_bytes: bytes) -> str:
-    return groq_vision_ocr(image_bytes)
-
-def _read_image(file_bytes: bytes) -> str:
-    # 1) Tesseract local
-    text = _ocr_with_tesseract(file_bytes, lang_hint="spa+eng")
-    if text and len(text.strip()) >= 4:
-        return text
-    # 2) Respaldo con Groq (visión)
-    text = _ocr_with_groq(file_bytes)
-    return text or ""
-
-def _read_plain(file_bytes: bytes) -> str:
-    try:
-        return file_bytes.decode("utf-8", errors="ignore")
-    except Exception:
-        return file_bytes.decode("latin1", errors="ignore")
-
-def extract_text_from_file(file_bytes: bytes, filename: str) -> str:
-    name = filename.lower()
-    if name.endswith(".pdf"):
-        return _read_pdf(file_bytes)
-    if name.endswith(".docx"):
-        return _read_docx(file_bytes)
-    if name.endswith(".pptx"):
-        return _read_pptx(file_bytes)
-    if name.endswith((".xlsx", ".xls")):
-        return _read_excel(file_bytes, filename)
-    if name.endswith((".txt", ".md", ".csv")):
-        return _read_plain(file_bytes)
-    if name.endswith((".jpg", ".jpeg", ".png")):
-        return _read_image(file_bytes)
-    return ""
-
-def chunk_text(text: str, max_chars: int = 1000, overlap: int = 200) -> List[str]:
-    text = text.replace("\r", "")
-    out, i, n = [], 0, len(text)
-    while i < n:
-        j = min(i + max_chars, n)
-        out.append(text[i:j])
-        if j == n:
-            break
-        i = j - overlap
-        if i < 0:
-            i = 0
-    return out
-
-def add_document_to_index(filename: str, file_bytes: bytes) -> Dict[str, Any]:
-    """
-    Guarda el archivo en storage/<usuario>/docs, lo fragmenta y actualiza el índice BM25 interno.
-    """
-    root = _user_root()
-    (root / "docs" / filename).write_bytes(file_bytes)
-    text = extract_text_from_file(file_bytes, filename).strip()
-    if not text:
-        raise ValueError("No se pudo extraer texto del archivo o está vacío.")
-    chunks = chunk_text(text, max_chars=1000, overlap=200)
-    idx = _load_index()
-    start = len(idx["chunks"])
-    for k, ch in enumerate(chunks):
-        idx["chunks"].append({"filename": filename, "chunk_index": start + k, "text": ch})
-    idx["tokens"] = [_simple_tokenize(c["text"]) for c in idx["chunks"]]
-    _save_index(idx)
-    return {"filename": filename, "num_chunks": len(chunks), "total_chunks": len(idx["chunks"])}
-
-def bm25_search(query: str, top_k: int = 5, k1: float = 1.5, b: float = 0.75) -> List[Dict[str, Any]]:
-    idx = _load_index()
-    docs_tokens = idx.get("tokens", [])
-    chunks = idx.get("chunks", [])
-    if not docs_tokens:
-        return []
-    N = len(docs_tokens)
-    df = Counter()
-    for d in docs_tokens:
-        df.update(set(d))
-    idf = {t: math.log(1 + (N - df_t + 0.5) / (df_t + 0.5)) for t, df_t in df.items()}
-    avgdl = sum(len(d) for d in docs_tokens) / float(N) if N else 0.0
-    q_tokens = _simple_tokenize(query)
-    scores = np.zeros(N, dtype=float)
-    for i, d in enumerate(docs_tokens):
-        dl = len(d) or 1
-        tf = Counter(d)
-        s = 0.0
-        denom_norm = k1 * (1 - b + b * (dl / (avgdl or 1.0)))
-        for t in q_tokens:
-            f = tf.get(t, 0)
-            if f == 0:
-                continue
-            s += idf.get(t, 0.0) * ((f * (k1 + 1)) / (f + denom_norm))
-        scores[i] = s
-    order = np.argsort(-scores)[:top_k]
-    out = []
-    for idx_i in order:
-        ch = chunks[int(idx_i)]
-        out.append({
-            "filename": ch["filename"],
-            "chunk_index": ch["chunk_index"],
-            "text": ch["text"],
-            "score": float(scores[int(idx_i)]),
-        })
-    return out
-
-# =============================================================================
-# Sidebar
-# =============================================================================
-def sidebar():
-    with st.sidebar:
-        st.markdown('<div class="sidebar-title">ZERO - Asistente Virtual</div>', unsafe_allow_html=True)
-        usuario_nombre = st.session_state.get("usuario", "Usuario")
-        st.markdown(f'Hola, <strong>{usuario_nombre}</strong>', unsafe_allow_html=True)
-
-        st.markdown('<div class="sidebar-section-title">🗂️ Menú</div>', unsafe_allow_html=True)
-        menu_options = ["Chat Principal", "Mis archivos"]
-        if st.session_state.rol == "admin":
-            menu_options += ["Análisis de Imágenes", "Transcripción de Audio", "Registro de Usuarios"]
-        selected_option = st.radio("", menu_options, key="menu_option", label_visibility="collapsed")
-
-        st.markdown('<div class="sidebar-section-title">💬 Chats anteriores</div>', unsafe_allow_html=True)
-        st.markdown('<div class="chat-list">', unsafe_allow_html=True)
-        usuario_actual = st.session_state.get("usuario")
-        if usuario_actual:
-            st.session_state.chat_history.setdefault(usuario_actual, {})
-            for chat_id, chat_data in st.session_state.chat_history[usuario_actual].items():
-                preview = (chat_data["messages"][-1]["content"][:50] + "...") if chat_data["messages"] else "Vacío"
+            user_chats = db.get_user_chats(st.session_state.user_id)
+            for chat in user_chats[-10:]:  # Mostrar últimos 10 chats
+                is_active = chat['chat_id'] == st.session_state.current_chat
+                preview = chat['title'][:50] + "..." if len(chat['title']) > 50 else chat['title']
+                
                 st.markdown(
                     f"""
-                    <div class="chat-item">
-                        <div><strong>{chat_data['title']}</strong></div>
+                    <div class="chat-item {'active' if is_active else ''}">
+                        <div><strong>{chat['title']}</strong></div>
                         <div class="chat-preview">{preview}</div>
                     </div>
                     """,
                     unsafe_allow_html=True,
                 )
-                if st.button("Abrir", key=f"open_{chat_id}"):
-                    load_chat(chat_id)
-        st.markdown('</div>', unsafe_allow_html=True)
-
-        if st.button("➕ Nuevo Chat", use_container_width=True):
-            save_current_chat()
-            st.session_state.current_chat = str(uuid.uuid4())
-            st.session_state.messages = []
-            if "usuario" in st.session_state:
-                st.session_state.chat_history[st.session_state.usuario][st.session_state.current_chat] = {
-                    "title": "Nuevo chat", "messages": []
-                }
-            st.rerun()
-
-        if st.button("🚪 Cerrar sesión", key="logout_btn", use_container_width=True, type="primary"):
-            logout()
-            st.rerun()
-
-        return selected_option
-
-# =============================================================================
-# Página: Mis archivos (subir e indexar)
-# =============================================================================
-def my_files_page():
-    st.title("📚 Mis archivos (Personalización)")
-    st.write("Sube **PDF, DOCX, TXT/MD/CSV, EXCEL (.xlsx/.xls), PowerPoint (.pptx) e IMÁGENES (.jpg/.jpeg/.png)**. "
-             "Se indexarán para que Zero responda usando tu contenido. "
-             "Para OCR en imágenes instala pytesseract + Tesseract; hay respaldo con Groq Visión.")
-
-    uploaded = st.file_uploader(
-        "Selecciona archivos",
-        type=["pdf","docx","txt","md","csv","xlsx","xls","pptx","jpg","jpeg","png"],
-        accept_multiple_files=True
-    )
-
-    if uploaded and st.button("Indexar", type="primary"):
-        ok, err = 0, 0
-        for f in uploaded:
-            try:
-                info = add_document_to_index(f.name, f.read())
-                st.success(f"✅ {info['filename']} — {info['num_chunks']} fragmentos añadidos")
-                ok += 1
-            except Exception as e:
-                st.error(f"❌ {f.name}: {e}")
-                err += 1
-        st.info(f"Terminado. Éxitos: {ok}, Errores: {err}")
-
-    # Vista rápida del índice (primeros 10)
-    idx = _load_index()
-    if idx["chunks"]:
-        st.markdown("### Vista rápida (primeros 10 fragmentos)")
-        for i, ch in enumerate(idx["chunks"][:10]):
-            with st.expander(f"{ch['filename']} — frag {i}"):
-                st.write(ch["text"])
-    else:
-        st.info("Aún no hay documentos indexados.")
-
-# =============================================================================
-# Chat principal (con toggle RAG) — usa Groq
-# =============================================================================
-def chat_page():
-    st.markdown("<div class='chat-container' id='chat-container'>", unsafe_allow_html=True)
-
-    colA, colB = st.columns([1,1])
-    with colA:
-        usar_mis_archivos = st.toggle("Usar mis archivos (RAG)", value=True)
-    with colB:
-        temperature = st.slider("Creatividad", 0.0, 1.2, 0.7, 0.1)
-
-    if len(st.session_state.messages) == 0:
-        display_message("assistant", f"Soy ZERO (Groq). ¿En qué puedo ayudarte hoy, {st.session_state.get('usuario','')}?")
-
-    for m in st.session_state.messages:
-        display_message(m["role"], m["content"])
-
-    st.markdown("</div>", unsafe_allow_html=True)
-
-    user_input = st.chat_input("Escribe tu mensaje aquí...")
-    st.markdown('<div class="disclaimer">Zero puede cometer errores. Verifica información importante.</div>', unsafe_allow_html=True)
-
-    if user_input and not st.session_state.thinking:
-        st.session_state.messages.append({"role": "user", "content": user_input})
-        st.session_state.thinking = True
-        save_current_chat()
-        st.rerun()
-
-    if st.session_state.thinking:
-        extra_messages = []
-        if usar_mis_archivos and st.session_state.messages:
-            last_user = st.session_state.messages[-1]["content"]
-            hits = bm25_search(last_user, top_k=5)
-            if hits:
-                ctx_lines = []
-                for h in hits:
-                    snippet = h["text"].replace("\n"," ").strip()
-                    ctx_lines.append(f"[{h['filename']}#{h['chunk_index']}] {snippet}")
-                context_block = "\n".join(ctx_lines)[:6000]
-                extra_messages = [{
-                    "role": "system",
-                    "content": (
-                        "CONTEXT_START\n" + context_block +
-                        "\nCONTEXT_END\nUsa este contexto si es relevante y cita el nombre del archivo cuando corresponda."
-                    ),
-                }]
-
-        history_msgs = [{"role": m["role"], "content": m["content"]} for m in st.session_state.messages]
-        final_messages = [
-            {"role": "system", "content": system_prompt_text()}
-        ] + history_msgs[:-1] + extra_messages + [history_msgs[-1]]
-
-        # Llamada no-streaming a Groq
-        reply = groq_chat_completion(final_messages, max_tokens=1200, temperature=temperature)
-        st.session_state.messages.append({"role": "assistant", "content": reply})
-        save_current_chat()
-
-        st.session_state.thinking = False
-        st.rerun()
-
-# =============================================================================
-# Página: Análisis de Imágenes (usa Groq visión)
-# =============================================================================
-def image_page():
-    st.title("🖼️ Análisis de Imágenes (Groq visión)")
-    st.write("Sube una imagen para que Zero la analice o para extraer texto (OCR).")
-
-    uploaded_image = st.file_uploader("Elige una imagen", type=["jpg", "png", "jpeg"])
-    if uploaded_image:
-        col1, col2 = st.columns([1, 2])
-        with col1:
-            st.image(uploaded_image, width=300)
-
-        image_bytes = uploaded_image.getvalue()
-        with st.spinner("Analizando con Groq visión..."):
-            # Prompt genérico de análisis
-            b64 = b64encode(image_bytes).decode("utf-8")
-            messages = [
-                {"role": "system", "content": "Eres un analista de imágenes. Sé claro y conciso."},
-                {"role": "user", "content": [
-                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}},
-                    {"type": "text", "text": "Describe la imagen y dame insights útiles."},
-                ]},
-            ]
-            analysis = groq_chat_completion(messages, max_tokens=800, temperature=0.2)
-
-            # OCR adicional
-            text_ocr = _read_image(image_bytes)
-
-        with col2:
-            st.markdown("### Análisis de Zero")
-            st.write(analysis)
-            st.markdown("### Texto (OCR)")
-            if text_ocr:
-                st.code(text_ocr)
-                if st.button("Guardar OCR como documento", type="primary"):
-                    try:
-                        fname = f"OCR_{uploaded_image.name}.txt"
-                        add_document_to_index(fname, text_ocr.encode("utf-8"))
-                        st.success("OCR guardado e indexado correctamente.")
-                    except Exception as e:
-                        st.error(f"No se pudo guardar el OCR: {e}")
-            else:
-                st.info("No se detectó texto legible.")
-
-# =============================================================================
-# Transcripción de Audio (igual que antes)
-# =============================================================================
-def audio_page():
-    st.title("🎙️ Transcripción de Audio")
-    st.write("Habla y Zero convertirá tu voz en texto")
-    audio_queue = queue.Queue()
-
-    class AudioProcessor:
-        def __init__(self):
-            self.recognizer = sr.Recognizer()
-            self.sample_rate = 16000
-        def recv(self, frame: av.AudioFrame):
-            if hasattr(frame, "sample_rate") and frame.sample_rate:
-                self.sample_rate = int(frame.sample_rate)
-            audio = frame.to_ndarray()
-            if audio.ndim > 1:
-                audio = np.mean(audio, axis=0)
-            audio = audio.astype(np.int16)
-            audio_queue.put((audio.tobytes(), self.sample_rate))
-            return av.AudioFrame.from_ndarray(audio, layout="mono")
-
-    webrtc_ctx = webrtc_streamer(
-        key="audio_transcriber",
-        mode=WebRtcMode.SENDONLY,
-        audio_receiver_size=256,
-        rtc_configuration={"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]},
-        media_stream_constraints={"audio": True, "video": False},
-        audio_processor_factory=AudioProcessor,
-    )
-
-    if webrtc_ctx.state.playing and st.button("Detener grabación"):
-        webrtc_ctx.stop(); st.rerun()
-
-    if st.button("Transcribir audio grabado", type="primary") and not audio_queue.empty():
-        try:
-            raw_chunks, srates = [], []
-            while not audio_queue.empty():
-                raw, rate = audio_queue.get()
-                raw_chunks.append(raw); srates.append(rate)
-            audio_bytes = b"".join(raw_chunks)
-            sample_rate = int(np.bincount(np.array(srates)).argmax()) if len(set(srates)) > 1 else srates[0]
-            recognizer = sr.Recognizer()
-            audio_data = sr.AudioData(audio_bytes, sample_rate=sample_rate, sample_width=2)
-            text = recognizer.recognize_google(audio_data, language="es-ES")
-            st.success("Texto reconocido:"); st.write(text)
-            if st.button("Usar en chat principal", type="primary"):
-                st.session_state.messages.append({"role": "user", "content": text})
-                save_current_chat(); st.rerun()
-        except sr.UnknownValueError:
-            st.error("No se pudo entender el audio")
-        except sr.RequestError as e:
-            st.error(f"Error en el servicio de reconocimiento: {e}")
+                
+                # Botón para cargar el chat
+                if st.button("Abrir", key=f"open_{chat['id']}"):
+                    st.session_state.current_chat = chat['chat_id']
+                    # Cargar mensajes del chat
+                    chat_messages = db.get_chat_messages(chat['chat_id'])
+                    st.session_state.messages = [
+                        {"role": msg['role'], "content": msg['content']} 
+                        for msg in chat_messages
+                    ]
+                    st.rerun()
         except Exception as e:
-            st.error(f"Error inesperado: {e}")
+            st.write("No hay chats anteriores")
 
-# =============================================================================
-# Registro de Usuarios (igual que antes)
-# =============================================================================
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # Botón de nuevo chat
+    if st.button("➕ Nuevo Chat", use_container_width=True):
+        save_current_chat()
+        st.session_state.current_chat = str(uuid.uuid4())
+        st.session_state.messages = []
+        st.rerun()
+
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # Sección de archivos del usuario
+    st.markdown('<div class="sidebar-section">', unsafe_allow_html=True)
+    st.markdown('<div class="sidebar-section-title">📁 Mis Archivos</div>', unsafe_allow_html=True)
+    
+    if st.session_state.get("user_files"):
+        # Mostrar últimos 5 archivos
+        for file_data in st.session_state.user_files[-5:]:
+            st.markdown(
+                f"""
+                <div class="file-item">
+                    <div class="file-name">📄 {file_data['filename']}</div>
+                    <div class="file-info">{file_data['file_type'].upper()} • {file_data['file_size'] / 1024:.1f} KB</div>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+    else:
+        st.markdown('<div style="color: var(--text-secondary); font-size: 0.9rem; text-align: center; padding: 1rem;">No hay archivos subidos</div>', unsafe_allow_html=True)
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # Sección de herramientas
+    st.markdown('<div class="sidebar-section">', unsafe_allow_html=True)
+    st.markdown('<div class="sidebar-section-title">🛠️ Herramientas</div>', unsafe_allow_html=True)
+
+    menu_options = ["Chat Principal", "Subir Archivos"]
+    if st.session_state.rol == "admin":
+        menu_options += ["Análisis de Imágenes", "Transcripción de Audio", "Registro de Usuarios"]
+
+    selected_option = st.radio("", menu_options, key="menu_option", label_visibility="collapsed")
+
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    if st.button("🚪 Cerrar sesión", key="logout_btn", use_container_width=True, type="primary"):
+        logout()
+        st.rerun()
+    
+    return selected_option
+    
+    return selected_option
+
+# --- FUNCIONES DE UTILIDAD PARA ARCHIVOS ---
+def save_uploaded_file(uploaded_file, user_id):
+    """Guarda un archivo subido y lo procesa"""
+    try:
+        # Crear directorio del usuario si no existe
+        user_dir = f"uploads/{user_id}"
+        os.makedirs(user_dir, exist_ok=True)
+        
+        # Guardar archivo físico
+        file_path = os.path.join(user_dir, uploaded_file.name)
+        with open(file_path, "wb") as f:
+            f.write(uploaded_file.getbuffer())
+        
+        # Procesar archivo
+        processor = FileProcessor()
+        content, summary, error = processor.process_file(file_path)
+        
+        if error:
+            return None, error
+        
+        # Guardar en base de datos
+        file_id = db.save_file(
+            user_id=user_id,
+            filename=uploaded_file.name,
+            file_path=file_path,
+            file_type=FileProcessor.get_file_type(uploaded_file.name),
+            file_size=uploaded_file.size,
+            content_extracted=content,
+            analysis_summary=summary
+        )
+        
+        # Agregar al contexto del usuario
+        if content:
+            context_key = f"Archivo: {uploaded_file.name}"
+            db.save_user_context(user_id, context_key, content, file_id)
+        
+        return file_id, None
+        
+    except Exception as e:
+        return None, str(e)
+
+def analyze_image_with_groq(image_base64, filename):
+    """Analiza una imagen usando Groq Vision"""
+    try:
+        payload = {
+            "model": GROQ_VISION_MODEL,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": f"Analiza esta imagen llamada '{filename}' y proporciona una descripción detallada de lo que ves, incluyendo elementos importantes, texto visible, colores, objetos, personas, y cualquier información relevante que pueda ser útil para futuras conversaciones."
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/jpeg;base64,{image_base64}"
+                            }
+                        }
+                    ]
+                }
+            ],
+            "max_tokens": 1000,
+            "temperature": 0.3
+        }
+        
+        response = requests.post(API_URL, headers=BASE_HEADERS, json=payload)
+        
+        if response.status_code == 200:
+            result = response.json()
+            return result['choices'][0]['message']['content']
+        else:
+            return f"Error en análisis: {response.status_code}"
+            
+    except Exception as e:
+        return f"Error procesando imagen: {str(e)}"
+
+def get_personalized_context(user_id, query):
+    """Obtiene contexto personalizado basado en archivos del usuario"""
+    try:
+        user_context = db.get_user_context(user_id)
+        if not user_context:
+            return ""
+        
+        # Buscar contexto relevante basado en la consulta
+        relevant_context = []
+        query_lower = query.lower()
+        
+        for context in user_context:
+            context_content = context['context_data'].lower()
+            # Búsqueda simple por palabras clave
+            if any(word in context_content for word in query_lower.split() if len(word) > 3):
+                relevant_context.append({
+                    'key': context['context_key'],
+                    'content': context['context_data'][:500] + "..." if len(context['context_data']) > 500 else context['context_data']
+                })
+        
+        if relevant_context:
+            context_text = "\n\nContexto personalizado basado en tus archivos:\n"
+            for ctx in relevant_context[:3]:  # Limitar a 3 contextos más relevantes
+                context_text += f"\n**{ctx['key']}:**\n{ctx['content']}\n"
+            return context_text
+        
+        return ""
+        
+    except Exception as e:
+        print(f"Error obteniendo contexto personalizado: {e}")
+        return ""
+
+# --- FUNCIONES DE CHAT MEJORADAS ---
+def chat_page():
+    """Página principal de chat con contexto personalizado"""
+    st.title("💬 Chat con Zero")
+    
+    # Mostrar mensajes del chat actual
+    chat_container = st.container()
+    with chat_container:
+        if st.session_state.messages:
+            for message in st.session_state.messages:
+                with st.chat_message(message["role"]):
+                    st.markdown(message["content"])
+    
+    # Input del usuario
+    if prompt := st.chat_input("Escribe tu mensaje aquí..."):
+        # Agregar mensaje del usuario
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        
+        with st.chat_message("user"):
+            st.markdown(prompt)
+        
+        # Obtener contexto personalizado
+        personalized_context = ""
+        if st.session_state.get("user_id"):
+            personalized_context = get_personalized_context(st.session_state.user_id, prompt)
+        
+        # Preparar mensaje con contexto
+        enhanced_prompt = prompt
+        if personalized_context:
+            enhanced_prompt = f"{prompt}{personalized_context}"
+        
+        # Generar respuesta
+        with st.chat_message("assistant"):
+            message_placeholder = st.empty()
+            full_response = ""
+            
+            try:
+                # Preparar mensajes para la API
+                messages_for_api = []
+                for msg in st.session_state.messages[:-1]:  # Excluir el último mensaje del usuario
+                    messages_for_api.append({
+                        "role": msg["role"],
+                        "content": msg["content"]
+                    })
+                
+                # Agregar el mensaje actual con contexto
+                messages_for_api.append({
+                    "role": "user",
+                    "content": enhanced_prompt
+                })
+                
+                payload = {
+                    "model": GROQ_TEXT_MODEL,
+                    "messages": messages_for_api,
+                    "stream": True,
+                    "max_tokens": 2000,
+                    "temperature": 0.7
+                }
+                
+                response = requests.post(API_URL, headers=STREAM_HEADERS, json=payload, stream=True)
+                
+                if response.status_code == 200:
+                    for line in response.iter_lines():
+                        if line:
+                            line = line.decode('utf-8')
+                            if line.startswith('data: '):
+                                data = line[6:]
+                                if data.strip() == '[DONE]':
+                                    break
+                                try:
+                                    json_data = json.loads(data)
+                                    if 'choices' in json_data and json_data['choices']:
+                                        delta = json_data['choices'][0].get('delta', {})
+                                        if 'content' in delta:
+                                            full_response += delta['content']
+                                            message_placeholder.markdown(full_response + "▌")
+                                except json.JSONDecodeError:
+                                    continue
+                    
+                    message_placeholder.markdown(full_response)
+                else:
+                    error_msg = f"Error {response.status_code}: {response.text}"
+                    message_placeholder.markdown(f"❌ {error_msg}")
+                    full_response = error_msg
+                    
+            except Exception as e:
+                error_msg = f"Error de conexión: {str(e)}"
+                message_placeholder.markdown(f"❌ {error_msg}")
+                full_response = error_msg
+        
+        # Guardar respuesta del asistente
+        st.session_state.messages.append({"role": "assistant", "content": full_response})
+        
+        # Guardar chat en base de datos
+        save_current_chat()
+        
+        # Auto-scroll
+        st.rerun()
+
+def save_current_chat():
+    """Guarda el chat actual en la base de datos"""
+    if st.session_state.get("user_id") and st.session_state.messages:
+        try:
+            # Generar título del chat basado en el primer mensaje
+            title = "Nuevo chat"
+            if st.session_state.messages:
+                first_user_msg = next((msg['content'] for msg in st.session_state.messages if msg['role'] == 'user'), "")
+                if first_user_msg:
+                    title = first_user_msg[:50] + "..." if len(first_user_msg) > 50 else first_user_msg
+            
+            # Guardar o actualizar chat
+            chat_id = db.save_chat(
+                user_id=st.session_state.user_id,
+                chat_id=st.session_state.current_chat,
+                title=title
+            )
+            
+            # Guardar mensajes
+            for i, message in enumerate(st.session_state.messages):
+                db.save_message(
+                    chat_id=chat_id,
+                    role=message['role'],
+                    content=message['content'],
+                    message_order=i
+                )
+                
+        except Exception as e:
+            print(f"Error guardando chat: {e}")
+
+# --- FUNCIONES EXISTENTES MEJORADAS ---
+def image_page():
+    """Página de análisis de imágenes mejorada"""
+    st.title("🖼️ Análisis de Imágenes")
+    st.write("Sube una imagen para que Zero la analice usando Groq Vision.")
+    
+    uploaded_file = st.file_uploader(
+        "Elige una imagen",
+        type=["jpg", "jpeg", "png", "gif", "bmp", "webp"]
+    )
+    
+    if uploaded_file is not None:
+        # Mostrar imagen
+        image = Image.open(uploaded_file)
+        st.image(image, caption=uploaded_file.name, use_column_width=True)
+        
+        if st.button("🔍 Analizar Imagen", type="primary"):
+            with st.spinner("Analizando imagen..."):
+                # Convertir a base64
+                image_base64 = b64encode(uploaded_file.getvalue()).decode('utf-8')
+                
+                # Analizar con Groq Vision
+                analysis = analyze_image_with_groq(image_base64, uploaded_file.name)
+                
+                # Mostrar resultado
+                st.subheader("📋 Análisis de la Imagen")
+                st.write(analysis)
+                
+                # Guardar análisis si el usuario está autenticado
+                if st.session_state.get("user_id"):
+                    try:
+                        db.save_image_analysis(
+                            user_id=st.session_state.user_id,
+                            image_path=f"temp/{uploaded_file.name}",
+                            analysis_result=analysis,
+                            model_used=GROQ_VISION_MODEL
+                        )
+                        st.success("✅ Análisis guardado en tu historial")
+                    except Exception as e:
+                        st.warning(f"⚠️ No se pudo guardar el análisis: {str(e)}")
+
+def audio_page():
+    """Página de transcripción de audio (función existente)"""
+    st.title("🎤 Transcripción de Audio")
+    st.write("Habla y Zero convertirá tu voz a texto.")
+    
+    # Configuración de WebRTC
+    webrtc_ctx = webrtc_streamer(
+        key="speech-to-text",
+        mode=WebRtcMode.SENDONLY,
+        audio_receiver_size=1024,
+        media_stream_constraints={"video": False, "audio": True},
+    )
+    
+    if webrtc_ctx.audio_receiver:
+        st.write("🎙️ Grabando... Habla ahora")
+        
+        # Procesar audio (implementación simplificada)
+        audio_frames = []
+        while True:
+            try:
+                audio_frame = webrtc_ctx.audio_receiver.get_frame(timeout=1)
+                audio_frames.append(audio_frame)
+            except queue.Empty:
+                break
+        
+        if audio_frames:
+            st.write("🔄 Procesando audio...")
+            # Aquí iría la lógica de transcripción
+            st.write("📝 Transcripción: [Funcionalidad en desarrollo]")
+
 def register_page():
-    st.title("📝 Registro de Usuarios")
-    with st.form("register_form"):
-        username = st.text_input("Nombre de usuario", max_chars=20)
+    """Página de registro de usuarios (solo admin)"""
+    st.title("👥 Registro de Usuarios")
+    
+    if st.session_state.get("rol") != "admin":
+        st.error("❌ Acceso denegado. Solo administradores pueden registrar usuarios.")
+        return
+    
+    with st.form("registro_form"):
+        st.subheader("Crear Nuevo Usuario")
+        
+        username = st.text_input("Nombre de usuario")
         password = st.text_input("Contraseña", type="password")
         confirm_password = st.text_input("Confirmar contraseña", type="password")
-        role = st.selectbox("Rol", ["usuario", "admin"])
-        submitted = st.form_submit_button("Registrar", type="primary")
+        rol = st.selectbox("Rol", ["usuario", "admin"])
+        nfc_uid = st.text_input("NFC UID (opcional)")
+        
+        submitted = st.form_submit_button("Registrar Usuario")
+        
         if submitted:
-            if password != confirm_password:
-                st.error("Las contraseñas no coinciden")
-            elif len(username) < 3:
-                st.error("El nombre de usuario debe tener al menos 3 caracteres")
+            if not username or not password:
+                st.error("❌ Todos los campos son obligatorios")
+            elif password != confirm_password:
+                st.error("❌ Las contraseñas no coinciden")
             elif len(password) < 6:
-                st.error("La contraseña debe tener al menos 6 caracteres")
+                st.error("❌ La contraseña debe tener al menos 6 caracteres")
             else:
-                registrar_usuario(username, password, role)
-                st.success(f"Usuario {username} registrado exitosamente")
-
-# =============================================================================
-# Router
-# =============================================================================
-def sidebar_router():
-    choice = sidebar()
-    if choice == "Chat Principal":
-        chat_page()
-    elif choice == "Mis archivos":
-        my_files_page()
-    elif choice == "Análisis de Imágenes":
-        image_page()
-    elif choice == "Transcripción de Audio":
-        audio_page()
-    elif choice == "Registro de Usuarios":
-        register_page()
-
-# =============================================================================
-# Entry point
-# =============================================================================
-if __name__ == "__main__":
+                try:
+                    success = registrar_usuario(username, password, rol, nfc_uid or None)
+                    if success:
+                        st.success(f"✅ Usuario '{username}' registrado exitosamente")
+                    else:
+                        st.error("❌ Error al registrar usuario. Puede que ya exista.")
+                except Exception as e:
+                    st.error(f"❌ Error: {str(e)}")
+def file_upload_page():
+    """Página para subir y gestionar archivos"""
+    st.title("📁 Gestión de Archivos")
+    st.write("Sube documentos e imágenes para que Zero pueda usarlos en las conversaciones.")
+    
+    # Verificar que el usuario esté autenticado
+    if not st.session_state.get("usuario"):
+        st.error("❌ Error de sesión. Por favor, vuelve a iniciar sesión.")
+        return
+    
+    # Obtener user_id desde la base de datos usando el username
+    username = st.session_state.usuario
+    user_id = db.get_user_id_by_username(username)
+    
+    if not user_id:
+        st.error("❌ No se pudo obtener la información del usuario.")
+        return
+    
+    # Sección de subida de archivos
+    st.subheader("📤 Subir Nuevo Archivo")
+    
+    uploaded_file = st.file_uploader(
+        "Elige un archivo",
+        type=["pdf", "docx", "doc", "txt", "xlsx", "xls", "csv", "jpg", "jpeg", "png", "gif", "bmp", "webp"],
+        help="Formatos soportados: PDF, Word, Excel, TXT, CSV e imágenes"
+    )
+    
+    if uploaded_file is not None:
+        # Mostrar información del archivo
+        st.info(f"📄 **{uploaded_file.name}** ({uploaded_file.size / 1024:.1f} KB)")
+        
+        if st.button("🚀 Procesar Archivo", type="primary"):
+            with st.spinner("Procesando archivo..."):
+                # Guardar y procesar archivo
+                file_id, error = save_uploaded_file(uploaded_file, user_id)
+                
+                if error:
+                    st.error(f"❌ Error al procesar archivo: {error}")
+                else:
+                    st.success("✅ Archivo procesado y guardado exitosamente")
+                    
+                    # Si es una imagen, realizar análisis con Groq Vision
+                    if uploaded_file.type.startswith('image/'):
+                        with st.spinner("Analizando imagen con Groq Vision..."):
+                            image_base64 = b64encode(uploaded_file.getvalue()).decode('utf-8')
+                            analysis = analyze_image_with_groq(image_base64, uploaded_file.name)
+                            
+                            # Guardar análisis
+                            db.save_image_analysis(
+                                user_id=user_id,
+                                image_path=f"uploads/{user_id}/{uploaded_file.name}",
+                                analysis_result=analysis,
+                                model_used=GROQ_VISION_MODEL,
+                                archivo_id=file_id
+                            )
+                            
+                            # Agregar análisis al contexto
+                            context_key = f"Análisis de imagen: {uploaded_file.name}"
+                            db.save_user_context(user_id, context_key, analysis, file_id)
+                            
+                            st.success("🖼️ Imagen analizada con Groq Vision")
+                    
+                    # Actualizar archivos en sesión
+                    st.session_state.user_files = db.get_user_files(user_id)
+                    st.session_state.user_context = db.get_user_context(user_id)
+                    
+                    st.rerun()
+    
+    # Sección de archivos existentes
+    st.subheader("📋 Archivos Subidos")
+    
+    # Cargar archivos del usuario si no están en sesión
+    if "user_files" not in st.session_state:
+        st.session_state.user_files = db.get_user_files(user_id)
+    
+    if st.session_state.get("user_files"):
+        for file_data in st.session_state.user_files:
+            with st.expander(f"📄 {file_data['filename']}"):
+                col1, col2 = st.columns([3, 1])
+                
+                with col1:
+                    st.write(f"**Tipo:** {file_data['file_type'].upper()}")
+                    st.write(f"**Tamaño:** {file_data['file_size'] / 1024:.1f} KB")
+                    st.write(f"**Subido:** {file_data['uploaded_at']}")
+                    
+                    if file_data.get('analysis_summary'):
+                        st.write(f"**Resumen:** {file_data['analysis_summary'][:200]}...")
+                
+                with col2:
+                    if st.button(f"🗑️ Eliminar", key=f"delete_{file_data['id']}"):
+                        # Eliminar archivo físico
+                        try:
+                            if os.path.exists(file_data['file_path']):
+                                os.remove(file_data['file_path'])
+                        except:
+                            pass
+                        
+                        # Eliminar de base de datos
+                        db.delete_file(file_data['id'], user_id)
+                        
+                        # Actualizar sesión
+                        st.session_state.user_files = db.get_user_files(user_id)
+                        st.session_state.user_context = db.get_user_context(user_id)
+                        
+                        st.success("🗑️ Archivo eliminado")
+                        st.rerun()
+                    
+                    if st.button(f"💬 Usar en Chat", key=f"use_{file_data['id']}"):
+                        if file_data.get('content_extracted'):
+                            # Agregar contenido al chat actual
+                            content_message = f"📄 **Contenido de {file_data['filename']}:**\n\n{file_data['content_extracted'][:1000]}..."
+                            st.session_state.messages.append({
+                                "role": "user", 
+                                "content": content_message
+                            })
+                            
+                            # Cambiar a página de chat
+                            st.session_state.menu_option = "Chat Principal"
+                            st.success(f"📄 Contenido de {file_data['filename']} agregado al chat")
+                            st.rerun()
+    else:
+        st.info("📭 No tienes archivos subidos aún. ¡Sube tu primer archivo!")
+        
+# --- FUNCIÓN PRINCIPAL ---
+def main():
+    """Función principal de la aplicación"""
+    load_css()
+    
+    # Verificar autenticación
     if not st.session_state.get("autenticado", False):
         verificar_login()
-    else:
-        sidebar_router()
+        return
+    
+    # Inicializar base de datos y cargar datos del usuario
+    if st.session_state.get("user_id") and "user_files" not in st.session_state:
+        st.session_state.user_files = db.get_user_files(st.session_state.user_id)
+        st.session_state.user_context = db.get_user_context(st.session_state.user_id)
+        
+        # Cargar historial de chats
+        user_chats = db.get_user_chats(st.session_state.user_id)
+        if user_chats:
+            # Cargar mensajes del chat actual
+            current_chat_messages = db.get_chat_messages(st.session_state.current_chat)
+            if current_chat_messages:
+                st.session_state.messages = [
+                    {"role": msg['role'], "content": msg['content']} 
+                    for msg in current_chat_messages
+                ]
+    
+    # Sidebar con navegación
+    with st.sidebar:
+        selected_option = create_sidebar()
+    
+    # Navegación principal
+    if selected_option == "Chat Principal":
+        chat_page()
+    elif selected_option == "Subir Archivos":
+        file_upload_page()
+    elif selected_option == "Análisis de Imágenes":
+        image_page()
+    elif selected_option == "Transcripción de Audio":
+        audio_page()
+    elif selected_option == "Registro de Usuarios":
+        register_page()
+
+if __name__ == "__main__":
+    main()
