@@ -25,5 +25,10 @@
         "clave": "valeria",
         "rol": "admin",
         "nfc_uid": null
+    },
+    "Sofia": {
+        "clave": "Sofia.",
+        "rol": "admin",
+        "nfc_uid": null
     }
 }

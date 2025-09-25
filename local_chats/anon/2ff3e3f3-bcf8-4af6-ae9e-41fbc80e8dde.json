@@ -1,0 +1,15 @@
+{
+  "chat_id": "2ff3e3f3-bcf8-4af6-ae9e-41fbc80e8dde",
+  "title": "dddd",
+  "updated_at": "2025-09-23 23:16:18",
+  "messages": [
+    {
+      "role": "user",
+      "content": "dddd"
+    },
+    {
+      "role": "assistant",
+      "content": "No entiendo tu solicitud. ¿En qué puedo ayudarte?"
+    }
+  ]
+}
