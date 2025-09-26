@@ -23,7 +23,7 @@ Este proyecto es un asistente virtual avanzado desarrollado en Python, diseñado
 
 1. Clona el repositorio:
    ```bash
-   git clone https://github.com/tu_usuario/ZERO-PERSONAL-ASISTANT.git
+   git clone https://github.com/scamero1/ZERO-PERSONAL-ASISTANT.git
    cd ZERO-PERSONAL-ASISTANT
    ```
 2. Instala las dependencias:
