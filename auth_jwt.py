@@ -6,12 +6,12 @@ import streamlit as st
 from typing import Optional, Dict, Any
 import uuid
 
-# Clave secreta para JWT (en producción debería estar en variables de entorno)
+ Clave secreta para JWT (en producción debería estar en variables de entorno)
 JWT_SECRET = os.getenv('JWT_SECRET', 'zero_ai_secret_key_2024')
 JWT_ALGORITHM = 'HS256'
 TOKEN_EXPIRY_HOURS = 1
 
-# Archivo para almacenar tokens activos
+ Archivo para almacenar tokens activos
 TOKENS_FILE = 'active_tokens.json'
 USUARIOS_FILE = 'usuarios.json'
 
@@ -53,12 +53,12 @@ class JWTAuth:
             'device_id': device_id,
             'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=TOKEN_EXPIRY_HOURS),
             'iat': datetime.datetime.utcnow(),
-            'jti': str(uuid.uuid4())  # JWT ID único
+            'jti': str(uuid.uuid4())   JWT ID único
         }
         
         token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
         
-        # Guardar token activo
+         Guardar token activo
         active_tokens = JWTAuth.load_active_tokens()
         if usuario not in active_tokens:
             active_tokens[usuario] = {}
@@ -78,7 +78,7 @@ class JWTAuth:
         try:
             payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
             
-            # Verificar si el token está en la lista de tokens activos
+             Verificar si el token está en la lista de tokens activos
             active_tokens = JWTAuth.load_active_tokens()
             usuario = payload.get('usuario')
             device_id = payload.get('device_id')
@@ -100,7 +100,7 @@ class JWTAuth:
         active_tokens = JWTAuth.load_active_tokens()
         if usuario in active_tokens and device_id in active_tokens[usuario]:
             del active_tokens[usuario][device_id]
-            if not active_tokens[usuario]:  # Si no quedan tokens para el usuario
+            if not active_tokens[usuario]:   Si no quedan tokens para el usuario
                 del active_tokens[usuario]
             JWTAuth.save_active_tokens(active_tokens)
     
@@ -171,13 +171,13 @@ class JWTAuth:
         payload = JWTAuth.verify_token(token)
         
         if payload:
-            # Actualizar información de sesión
+             Actualizar información de sesión
             st.session_state.usuario = payload['usuario']
             st.session_state.rol = payload['rol']
             st.session_state.device_id = payload['device_id']
             return True
         else:
-            # Token inválido, limpiar sesión
+             Token inválido, limpiar sesión
             JWTAuth.clear_session()
             return False
     
@@ -195,7 +195,7 @@ class JWTAuth:
         device_id = JWTAuth.get_device_id()
         token = JWTAuth.generate_token(usuario, rol, device_id)
         
-        # Configurar sesión
+         Configurar sesión
         st.session_state.jwt_token = token
         st.session_state.usuario = usuario
         st.session_state.rol = rol
@@ -211,10 +211,10 @@ class JWTAuth:
             JWTAuth.invalidate_token(st.session_state.usuario, st.session_state.device_id)
         JWTAuth.clear_session()
 
-# Función de middleware para verificar autenticación
+ Función de middleware para verificar autenticación
 def require_auth():
     """Middleware que requiere autenticación JWT"""
-    JWTAuth.cleanup_expired_tokens()  # Limpiar tokens expirados
+    JWTAuth.cleanup_expired_tokens()   Limpiar tokens expirados
     
     if not JWTAuth.is_authenticated():
         return False

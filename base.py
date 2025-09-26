@@ -16,10 +16,10 @@ import uuid
 import random
 from dotenv import load_dotenv
 
-# --- Load environment variables ---
+ --- Load environment variables ---
 load_dotenv()
 
-# --- CONFIGURACIÓN INICIAL ---
+ --- CONFIGURACIÓN INICIAL ---
 st.set_page_config(
     page_title="ZERO - Asistente Virtual",
     page_icon="favicon.ico",
@@ -27,8 +27,8 @@ st.set_page_config(
     initial_sidebar_state="auto"
 )
 
-# --- ESTADOS DE SESIÓN ---
-# Inicializar historial de chat para el usuario actual (solo si está autenticado)
+ --- ESTADOS DE SESIÓN ---
+ Inicializar historial de chat para el usuario actual (solo si está autenticado)
 if st.session_state.get("autenticado", False) and st.session_state.get("usuario"):
     usuario_actual = st.session_state.usuario
     if usuario_actual not in st.session_state.chat_history:
@@ -39,7 +39,7 @@ if st.session_state.get("autenticado", False) and st.session_state.get("usuario"
             "messages": []
         }
 
-# --- ESTILOS CSS ---
+ --- ESTILOS CSS ---
 def load_css():
     favicon_path = "favicon.ico"
     favicon_base64 = ""
@@ -54,23 +54,23 @@ def load_css():
         
         /* Variables de diseño minimalista */
         :root {{
-            --bg-primary: #000000;        /* Fondo negro */
-            --bg-card: #1a1a1a;          /* Tarjetas gris oscuro */
-            --bg-sidebar: #111111;       /* Sidebar negro más claro */
-            --text-primary: #ffffff;      /* Texto blanco */
-            --text-secondary: #cccccc;    /* Texto gris claro */
-            --text-muted: #888888;        /* Texto gris medio */
-            --purple: #8B5CF6;            /* Morado principal */
-            --purple-hover: #7C3AED;      /* Morado hover */
-            --purple-light: #A78BFA;      /* Morado claro */
-            --border: #333333;            /* Bordes grises */
+            --bg-primary: 000000;        /* Fondo negro */
+            --bg-card: 1a1a1a;          /* Tarjetas gris oscuro */
+            --bg-sidebar: 111111;       /* Sidebar negro más claro */
+            --text-primary: ffffff;      /* Texto blanco */
+            --text-secondary: cccccc;    /* Texto gris claro */
+            --text-muted: 888888;        /* Texto gris medio */
+            --purple: 8B5CF6;            /* Morado principal */
+            --purple-hover: 7C3AED;      /* Morado hover */
+            --purple-light: A78BFA;      /* Morado claro */
+            --border: 333333;            /* Bordes grises */
             --shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
             
             /* Mensajes chat */
-            --assistant-bg: #2a2a2a;
-            --assistant-text: #ffffff;
-            --user-bg: #8B5CF6;
-            --user-text: #ffffff;
+            --assistant-bg: 2a2a2a;
+            --assistant-text: ffffff;
+            --user-bg: 8B5CF6;
+            --user-text: ffffff;
             
             --sidebar-width: 300px;
         }}
@@ -344,28 +344,28 @@ def load_css():
 
 load_css()
 
-# --- INICIALIZACIÓN DE SERVICIOS ---
-# OpenAI
+ --- INICIALIZACIÓN DE SERVICIOS ---
+ OpenAI
 try:
     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 except Exception as e:
     st.error(f"Error al inicializar OpenAI: {e}")
     st.stop()
 
-# Twilio (para verificación SMS)
+ Twilio (para verificación SMS)
 try:
     twilio_client = Client(
         os.getenv("TWILIO_ACCOUNT_SID"),
         os.getenv("TWILIO_AUTH_TOKEN")
     )
 except Exception as e:
-    # No es crítico para el funcionamiento básico del app
+     No es crítico para el funcionamiento básico del app
     st.warning(f"No se pudo inicializar Twilio: {e}")
 
-# --- INICIALIZACIÓN DE ESTADO ---
+ --- INICIALIZACIÓN DE ESTADO ---
 def initialize_session_state():
     """Inicializa las variables de estado de sesión necesarias"""
-    # Variables de autenticación
+     Variables de autenticación
     if "autenticado" not in st.session_state:
         st.session_state.autenticado = False
     if "usuario" not in st.session_state:
@@ -373,13 +373,13 @@ def initialize_session_state():
     if "rol" not in st.session_state:
         st.session_state.rol = None
     
-    # Variables de chat
+     Variables de chat
     if "messages" not in st.session_state:
         st.session_state.messages = []
     if "thinking" not in st.session_state:
         st.session_state.thinking = False
     
-    # Variables de interfaz
+     Variables de interfaz
     if "sidebar_collapsed" not in st.session_state:
         st.session_state.sidebar_collapsed = False
     if "chat_history" not in st.session_state:
@@ -387,10 +387,10 @@ def initialize_session_state():
     if "current_chat" not in st.session_state:
         st.session_state.current_chat = str(uuid.uuid4())
 
-# Inicializar estado al cargar la aplicación
+ Inicializar estado al cargar la aplicación
 initialize_session_state()
 
-# --- FUNCIONES UTILITARIAS ---
+ --- FUNCIONES UTILITARIAS ---
 def generate_response():
     """Genera una respuesta del asistente AI (streaming) usando el historial."""
     try:
@@ -410,7 +410,7 @@ def generate_response():
 def display_message(role, content):
     """Muestra un mensaje en el chat con el estilo adecuado."""
     if role == "assistant":
-        # Eliminamos el prefijo "Zero: " si existe
+         Eliminamos el prefijo "Zero: " si existe
         clean_content = content.replace("Zero:", "").strip()
         st.markdown(
             f"<div class='message'><div class='assistant-message'>{clean_content}</div></div>",
@@ -428,7 +428,7 @@ def save_current_chat():
         first_message = st.session_state.messages[0]["content"] if st.session_state.messages else "Nuevo chat"
         title = first_message[:30] + "..." if len(first_message) > 30 else first_message
         
-        # Guardar en el historial del usuario actual
+         Guardar en el historial del usuario actual
         st.session_state.chat_history[st.session_state.usuario][st.session_state.current_chat] = {
             "title": title,
             "messages": st.session_state.messages.copy(),
@@ -441,21 +441,21 @@ def load_chat(chat_id):
         st.session_state.messages = st.session_state.chat_history[st.session_state.usuario][chat_id]["messages"].copy()
         st.rerun()
 
-# --- BARRA LATERAL ---
+ --- BARRA LATERAL ---
 def sidebar():
     with st.sidebar:
-        # Título de la barra lateral
+         Título de la barra lateral
         st.markdown('<div class="sidebar-title">ZERO - Asistente Virtual</div>', unsafe_allow_html=True)
 
-        # Saludo personalizado
+         Saludo personalizado
         usuario_nombre = st.session_state.get("usuario", "Usuario")
         st.markdown(f'<div style="margin-bottom: 1rem;">Hola, <strong>{usuario_nombre}</strong></div>', unsafe_allow_html=True)
 
-        # Lista de chats
+         Lista de chats
         st.markdown('<div class="sidebar-section-title">💬 Chats anteriores</div>', unsafe_allow_html=True)
         st.markdown('<div class="chat-list">', unsafe_allow_html=True)
 
-        # Renderiza cada chat del usuario actual
+         Renderiza cada chat del usuario actual
         usuario_actual = st.session_state.get("usuario")
         if usuario_actual and usuario_actual in st.session_state.chat_history:
             user_chats = st.session_state.chat_history[usuario_actual]
@@ -464,7 +464,7 @@ def sidebar():
                 is_active = chat_id == st.session_state.current_chat
                 preview = (chat_data["messages"][-1]["content"][:50] + "...") if chat_data["messages"] else "Vacío"
 
-                # Mostrar cada chat
+                 Mostrar cada chat
                 st.markdown(
                     f"""
                     <div class="chat-item {'active' if is_active else ''}">
@@ -475,13 +475,13 @@ def sidebar():
                     unsafe_allow_html=True,
                 )
                 
-                # Botón para cargar el chat
+                 Botón para cargar el chat
                 if st.button("Abrir", key=f"open_{chat_id}"):
                     load_chat(chat_id)
 
         st.markdown('</div>', unsafe_allow_html=True)
 
-        # Botón de nuevo chat
+         Botón de nuevo chat
         if st.button("➕ Nuevo Chat", use_container_width=True):
             save_current_chat()
             st.session_state.current_chat = str(uuid.uuid4())
@@ -493,11 +493,11 @@ def sidebar():
                 }
             st.rerun()
 
-        # Sección de herramientas
+         Sección de herramientas
         st.markdown('<div class="sidebar-section">', unsafe_allow_html=True)
         st.markdown('<div class="sidebar-section-title">🛠️ Herramientas</div>', unsafe_allow_html=True)
 
-        # Opciones de menú
+         Opciones de menú
         menu_options = ["Chat Principal"]
         if st.session_state.rol == "admin":
             menu_options += ["Análisis de Imágenes", "Transcripción de Audio", "Registro de Usuarios"]
@@ -506,29 +506,29 @@ def sidebar():
 
         st.markdown('</div>', unsafe_allow_html=True)
 
-        # Botón de cerrar sesión
+         Botón de cerrar sesión
         if st.button("🚪 Cerrar sesión", key="logout_btn", use_container_width=True, type="primary"):
             logout()
             st.rerun()
 
         return selected_option
 
-# --- PÁGINA PRINCIPAL ---
+ --- PÁGINA PRINCIPAL ---
 def chat_page():
-    # Contenedor del chat
+     Contenedor del chat
     chat_container = st.container()
     with chat_container:
         st.markdown("<div class='chat-container' id='chat-container'>", unsafe_allow_html=True)
 
-        # Mensaje de bienvenida
+         Mensaje de bienvenida
         if len(st.session_state.messages) == 0:
             display_message("assistant", f"¿En qué puedo ayudarte hoy, {st.session_state.usuario}?")
 
-        # Mensajes existentes
+         Mensajes existentes
         for message in st.session_state.messages:
             display_message(message["role"], message["content"])
 
-        # Indicador de "pensando"
+         Indicador de "pensando"
         if st.session_state.thinking:
             st.markdown(
                 """
@@ -543,7 +543,7 @@ def chat_page():
 
         st.markdown("</div>", unsafe_allow_html=True)
 
-    # JavaScript para scroll automático
+     JavaScript para scroll automático
     st.markdown("""
     <script>
         function scrollToBottom() {
@@ -564,10 +564,10 @@ def chat_page():
     </script>
     """, unsafe_allow_html=True)
 
-    # Input de usuario
+     Input de usuario
     user_input = st.chat_input("Escribe tu mensaje aquí...")
 
-    # Disclaimer
+     Disclaimer
     st.markdown(
         """
         <div class="disclaimer">
@@ -613,7 +613,7 @@ def chat_page():
         st.session_state.thinking = False
         st.rerun()
 
-# --- PÁGINA DE IMAGEN ---
+ --- PÁGINA DE IMAGEN ---
 def image_page():
     st.title("🖼️ Análisis de Imágenes")
     st.write("Sube una imagen para que Zero la analice")
@@ -660,7 +660,7 @@ def image_page():
                 analysis = response.choices[0].message.content
 
                 with col2:
-                    st.markdown("### Análisis de Zero")
+                    st.markdown(" Análisis de Zero")
                     st.write(analysis)
 
                 if st.button("Agregar al chat principal", type="primary"):
@@ -675,7 +675,7 @@ def image_page():
             except Exception as e:
                 st.error(f"Error al analizar la imagen: {e}")
 
-# --- PÁGINA DE AUDIO ---
+ --- PÁGINA DE AUDIO ---
 def audio_page():
     st.title("🎙️ Transcripción de Audio")
     st.write("Habla y Zero convertirá tu voz en texto")
@@ -685,7 +685,7 @@ def audio_page():
     class AudioProcessor:
         def __init__(self):
             self.recognizer = sr.Recognizer()
-            self.sample_rate = 16000  # valor por defecto; se actualizará desde los frames si es posible
+            self.sample_rate = 16000   valor por defecto; se actualizará desde los frames si es posible
 
         def recv(self, frame: av.AudioFrame):
             if hasattr(frame, "sample_rate") and frame.sample_rate:
@@ -738,7 +738,7 @@ def audio_page():
         except Exception as e:
             st.error(f"Error inesperado: {e}")
 
-# --- PÁGINA DE REGISTRO ---
+ --- PÁGINA DE REGISTRO ---
 def register_page():
     st.title("📝 Registro de Usuarios")
 
@@ -761,14 +761,14 @@ def register_page():
                 registrar_usuario(username, password, role)
                 st.success(f"Usuario {username} registrado exitosamente")
 
-# --- RUTA PRINCIPAL ---
+ --- RUTA PRINCIPAL ---
 def main():
-    # Verificar si el usuario está autenticado
+     Verificar si el usuario está autenticado
     if not st.session_state.get("autenticado", False):
         st.error("❌ Acceso denegado. Por favor, inicia sesión.")
         st.stop()
     
-    # Verificar que las variables de sesión necesarias estén inicializadas
+     Verificar que las variables de sesión necesarias estén inicializadas
     if "usuario" not in st.session_state:
         st.error("❌ Error de sesión. Por favor, vuelve a iniciar sesión.")
         if st.button("🔄 Reiniciar Sesión"):
@@ -788,10 +788,10 @@ def main():
         register_page()
 
 if __name__ == "__main__":
-    # Verificar autenticación antes de ejecutar la aplicación principal
+     Verificar autenticación antes de ejecutar la aplicación principal
     if not st.session_state.get("autenticado", False):
-        # Si no está autenticado, mostrar login
+         Si no está autenticado, mostrar login
         verificar_login()
     else:
-        # Si está autenticado, ejecutar la aplicación principal
+         Si está autenticado, ejecutar la aplicación principal
         main()
