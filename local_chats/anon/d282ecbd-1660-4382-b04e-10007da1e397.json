@@ -1,0 +1,23 @@
+{
+  "chat_id": "d282ecbd-1660-4382-b04e-10007da1e397",
+  "title": "hola",
+  "updated_at": "2025-09-26 10:24:54",
+  "messages": [
+    {
+      "role": "user",
+      "content": "hola"
+    },
+    {
+      "role": "assistant",
+      "content": "Hola, ¿en qué puedo ayudarte?"
+    },
+    {
+      "role": "user",
+      "content": "dame un codigo de python que sriva como juego y que este en tkinker"
+    },
+    {
+      "role": "assistant",
+      "content": "Aquí te dejo un ejemplo de un juego simple de \"Adivina el número\" utilizando Tkinter en Python:\n```python\nimport tkinter as tk\nfrom random import randint\n\nclass JuegoAdivinaNumero:\n    def __init__(self):\n        self.ventana = tk.Tk()\n        self.ventana.title(\"Adivina el número\")\n        self.numero_secreto = randint(1, 100)\n        self.intentos = 0\n\n        self.etiqueta_titulo = tk.Label(self.ventana, text=\"Adivina el número\")\n        self.etiqueta_titulo.pack()\n\n        self.etiqueta_instrucciones = tk.Label(self.ventana, text=\"Introduce un número entre 1 y 100\")\n        self.etiqueta_instrucciones.pack()\n\n        self.entrada_numero = tk.Entry(self.ventana)\n        self.entrada_numero.pack()\n\n        self.boton_comprobar = tk.Button(self.ventana, text=\"Comprobar\", command=self.comprobar_numero)\n        self.boton_comprobar.pack()\n\n        self.etiqueta_resultado = tk.Label(self.ventana, text=\"\")\n        self.etiqueta_resultado.pack()\n\n    def comprobar_numero(self):\n        self.intentos += 1\n        numero_introducido = int(self.entrada_numero.get())\n        if numero_introducido < self.numero_secreto:\n            self.etiqueta_resultado.config(text=\"Demasiado bajo\", fg=\"blue\")\n        elif numero_introducido > self.numero_secreto:\n            self.etiqueta_resultado.config(text=\"Demasiado alto\", fg=\"red\")\n        else:\n            self.etiqueta_resultado.config(text=f\"¡Felicidades! Has adivinado el número en {self.intentos} intentos\", fg=\"green\")\n            self.boton_comprobar.config(state=\"disabled\")\n\n    def run(self):\n        self.ventana.mainloop()\n\nif __name__ == \"__main__\":\n    juego = JuegoAdivinaNumero()\n    juego.run()\n```\nEste código crea una ventana con una etiqueta de título, una etiqueta de instrucciones, un campo de entrada para introducir el número, un botón para comprobar el número y una etiqueta para mostrar el resultado. El juego genera un número secreto entre 1 y 100 y el jugador debe adivinarlo. Después de cada intento, el juego muestra un mensaje indicando si el número introducido es demasiado bajo o demasiado alto. Si el jugador adivina el número, el juego muestra un mensaje de felicitaciones y desactiva el botón de comprobar.\n\nEspero que te guste. ¡Buena suerte!"
+    }
+  ]
+}

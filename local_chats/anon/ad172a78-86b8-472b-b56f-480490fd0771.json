@@ -1,0 +1,23 @@
+{
+  "chat_id": "ad172a78-86b8-472b-b56f-480490fd0771",
+  "title": "hey como estas",
+  "updated_at": "2025-09-25 22:46:10",
+  "messages": [
+    {
+      "role": "user",
+      "content": "hey como estas"
+    },
+    {
+      "role": "assistant",
+      "content": "Hola, estoy funcionando correctamente. ¿En qué puedo ayudarte hoy?"
+    },
+    {
+      "role": "user",
+      "content": "que buscas"
+    },
+    {
+      "role": "assistant",
+      "content": "Mi objetivo es proporcionar información útil y responder a tus preguntas de manera clara y concisa. No tengo preferencias personales, pero estoy aquí para ayudarte con cualquier tema que desees discutir o pregunta que tengas. ¿Hay algo específico en lo que te pueda ayudar?"
+    }
+  ]
+}
