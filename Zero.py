@@ -607,14 +607,12 @@ def create_sidebar():
     if st.session_state.get("user_files"):
          Mostrar últimos 5 archivos
         for file_data in st.session_state.user_files[-5:]:
-            st.markdown(
-                f"""
-                <div class="file-item">
-                    <div class="file-name">📄 {file_data['filename']}</div>
-                    <div class="file-info">{file_data['file_type'].upper()} • {file_data['file_size'] / 1024:.1f} KB</div>
-                </div>
-                """,
-                unsafe_allow_html=True
+            st.markdown("""
+            <div style="background-color: #d9edf7; padding: 20px; border-radius: 8px; color: #31708f; text-align: center;">
+            <h4>Sube tus archivos aquí</h4>
+            </div>
+            """, unsafe_allow_html=True)
+
             )
     else:
         st.markdown('<div style="color: var(--text-secondary); font-size: 0.9rem; text-align: center; padding: 1rem;">No hay archivos subidos</div>', unsafe_allow_html=True)
