@@ -526,115 +526,105 @@ if not st.session_state.get("autenticado", False):
 
 # --- SIDEBAR ZERO MEJORADO ---
 def create_sidebar():
-    """Crea la barra lateral con diseño Zero mejorado"""
-    with st.sidebar:
-        # Header del sidebar
-        st.markdown(f"""
-            <div class="sidebar-header">
-                <div class="sidebar-title">
-                    <div>⚡</div>
-                    <div>ZERO</div>
-                </div>
-                <div class="user-info">
-                    Hola, {st.session_state.get('usuario', 'Usuario')}
-                </div>
-            </div>
-        """, unsafe_allow_html=True)
-        
-        # Botón nuevo chat morado
-        if st.button("Nuevo Chat", key="new_chat_btn", use_container_width=True, type="primary"):
-            save_current_chat()
-            st.session_state.current_chat = str(uuid.uuid4())
-            st.session_state.messages = []
-            st.rerun()
-        
-        # Sección de chats anteriores
-        st.markdown('<div class="sidebar-section">', unsafe_allow_html=True)
-        st.markdown('<div class="section-title">Conversaciones</div>', unsafe_allow_html=True)
-        
-        if st.session_state.get("user_id"):
-            try:
-                user_chats = db.get_user_chats(st.session_state.user_id)
-                if user_chats:
-                    user_chats.sort(key=lambda x: x.get('created_at', ''), reverse=True)
-                    
-                    for chat in user_chats[:8]:
-                        is_active = chat['chat_id'] == st.session_state.current_chat
-                        preview = chat['title'][:25] + "..." if len(chat['title']) > 25 else chat['title']
-                        
-                        if st.button(
-                            preview,
-                            key=f"chat_{chat['chat_id']}",
-                            use_container_width=True,
-                            type="primary" if is_active else "secondary"
-                        ):
-                            st.session_state.current_chat = chat['chat_id']
-                            chat_messages = db.get_chat_messages(chat['chat_id'])
-                            st.session_state.messages = [
-                                {"role": msg['role'], "content": msg['content']}
-                                for msg in chat_messages
-                            ]
-                            st.rerun()
-                else:
-                    st.info("Inicia tu primera conversación")
-            except Exception as e:
-                st.error("Error cargando conversaciones")
-        
-        st.markdown('</div>', unsafe_allow_html=True)
-        
-        # Sección de archivos
-        st.markdown('<div class="sidebar-section">', unsafe_allow_html=True)
-        st.markdown('<div class="section-title">Archivos</div>', unsafe_allow_html=True)
-        
-        if not st.session_state.get("user_files"):
-            st.session_state.user_files = db.get_user_files(st.session_state.user_id)
-        
-        if st.session_state.user_files:
-            for file_data in st.session_state.user_files[:4]:
-                if st.button(
-                    f"{file_data['filename'][:20]}...",
-                    key=f"sidebar_file_{file_data['id']}",
-                    use_container_width=True,
-                    help=f"Usar {file_data['filename']} en el chat"
-                ):
-                    if file_data.get('content_extracted'):
-                        content_msg = f"Archivo: {file_data['filename']}\n\n{file_data['content_extracted'][:250]}..."
-                        st.session_state.messages.append({"role": "user", "content": content_msg})
-                        st.success("Archivo agregado al chat")
-                        st.rerun()
-        else:
-            st.info("Sube tu primer archivo")
-        
-        st.markdown('</div>', unsafe_allow_html=True)
-        
-        # Navegación principal con botones morados
-        st.markdown('<div class="sidebar-section">', unsafe_allow_html=True)
-        st.markdown('<div class="section-title">Navegación</div>', unsafe_allow_html=True)
-        
-        # Botones de navegación morados
-        if st.button("Chat con Zero", key="nav_chat", use_container_width=True, type="primary"):
-            st.session_state.current_page = "chat"
-            st.rerun()
-        
-        if st.button("Gestor de Archivos", key="nav_files", use_container_width=True, type="primary"):
-            st.session_state.current_page = "files"
-            st.rerun()
-            
-        if st.session_state.rol == "admin":
-            if st.button("Panel Admin", key="nav_admin", use_container_width=True, type="primary"):
-                st.session_state.current_page = "admin"
-                st.rerun()
-        
-        st.markdown('</div>', unsafe_allow_html=True)
-        
-        # Footer del sidebar
-        st.markdown("---")
-        if st.button("Cerrar Sesión", use_container_width=True, type="secondary"):
-            logout()
+    """Crea la barra lateral con navegación y gestión de archivos"""
+     Título de la barra lateral
+    st.markdown('<div class="sidebar-title">ZERO - Asistente Virtual</div>', unsafe_allow_html=True)
 
-# --- SISTEMA DE ARCHIVOS ---
-def analyze_document_with_groq(content, filename):
-    """Analiza documentos con Groq"""
+     Saludo personalizado
+    usuario_nombre = st.session_state.get("usuario", "Usuario")
+    st.markdown(f'<div style="margin-bottom: 1rem;">Hola, <strong>{usuario_nombre}</strong></div>', unsafe_allow_html=True)
+
+     Lista de chats anteriores
+    st.markdown('<div class="sidebar-section">', unsafe_allow_html=True)
+    st.markdown('<div class="sidebar-section-title">💬 Chats anteriores</div>', unsafe_allow_html=True)
+    st.markdown('<div class="chat-list">', unsafe_allow_html=True)
+
+     Renderizar chats del usuario actual
+    if st.session_state.get("user_id"):
+        try:
+            user_chats = db.get_user_chats(st.session_state.user_id)
+            for chat in user_chats[-10:]:   Mostrar últimos 10 chats
+                is_active = chat['chat_id'] == st.session_state.current_chat
+                preview = chat['title'][:50] + "..." if len(chat['title']) > 50 else chat['title']
+                
+                st.markdown(
+                    f"""
+                    <div class="chat-item {'active' if is_active else ''}">
+                        <div><strong>{chat['title']}</strong></div>
+                        <div class="chat-preview">{preview}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+                
+                 Botón para cargar el chat
+                if st.button("Abrir", key=f"open_{chat['id']}"):
+                    st.session_state.current_chat = chat['chat_id']
+                     Cargar mensajes del chat
+                    chat_messages = db.get_chat_messages(chat['chat_id'])
+                    st.session_state.messages = [
+                        {"role": msg['role'], "content": msg['content']} 
+                        for msg in chat_messages
+                    ]
+                    st.rerun()
+        except Exception as e:
+            st.write("No hay chats anteriores")
+
+    st.markdown('</div>', unsafe_allow_html=True)
+
+     Botón de nuevo chat
+    if st.button("➕ Nuevo Chat", use_container_width=True):
+        save_current_chat()
+        st.session_state.current_chat = str(uuid.uuid4())
+        st.session_state.messages = []
+        st.rerun()
+
+    st.markdown('</div>', unsafe_allow_html=True)
+
+     Sección de archivos del usuario
+    st.markdown('<div class="sidebar-section">', unsafe_allow_html=True)
+    st.markdown('<div class="sidebar-section-title">📁 Mis Archivos</div>', unsafe_allow_html=True)
+    
+    if st.session_state.get("user_files"):
+         Mostrar últimos 5 archivos
+        for file_data in st.session_state.user_files[-5:]:
+            st.markdown(
+                f"""
+                <div class="file-item">
+                    <div class="file-name">📄 {file_data['filename']}</div>
+                    <div class="file-info">{file_data['file_type'].upper()} • {file_data['file_size'] / 1024:.1f} KB</div>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+    else:
+        st.markdown('<div style="color: var(--text-secondary); font-size: 0.9rem; text-align: center; padding: 1rem;">No hay archivos subidos</div>', unsafe_allow_html=True)
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+
+     Sección de herramientas
+    st.markdown('<div class="sidebar-section">', unsafe_allow_html=True)
+    st.markdown('<div class="sidebar-section-title">🛠️ Herramientas</div>', unsafe_allow_html=True)
+
+    menu_options = ["Chat Principal", "Subir Archivos"]
+    if st.session_state.rol == "admin":
+        menu_options += ["Análisis de Imágenes", "Transcripción de Audio", "Registro de Usuarios"]
+
+    selected_option = st.radio("", menu_options, key="menu_option", label_visibility="collapsed")
+
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    if st.button("🚪 Cerrar sesión", key="logout_btn", use_container_width=True, type="primary"):
+        logout()
+        st.rerun()
+    
+    return selected_option
+    
+    return selected_option
+
+ --- FUNCIONES DE UTILIDAD PARA ARCHIVOS ---
+def save_uploaded_file(uploaded_file, user_id):
+    """Guarda un archivo subido y lo procesa"""
     try:
         content_preview = content[:3000]
         

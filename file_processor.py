@@ -14,10 +14,8 @@ class FileProcessor:
     SUPPORTED_TYPES = {
         'pdf': ['.pdf'],
         'word': ['.docx', '.doc'],
-        'excel': ['.xlsx', '.xls'],
-        'csv': ['.csv'],
-        'text': ['.txt', '.md'],
-        'json': ['.json'],
+        'excel': ['.xlsx', '.xls', '.csv'],
+        'text': ['.txt', '.md', '.json'],
         'image': ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp']
     }
     
@@ -44,46 +42,35 @@ class FileProcessor:
             text = ""
             for page in pdf_reader.pages:
                 text += page.extract_text() + "\n"
+            
             return text.strip()
         except Exception as e:
             return f"Error al procesar PDF: {str(e)}"
     
     @staticmethod
     def extract_text_from_word(file_bytes: bytes) -> str:
-        """Extrae texto de un archivo Word"""
+        """Extrae texto de un archivo Word (.docx). Para .doc, devuelve error controlado."""
         try:
             doc_file = io.BytesIO(file_bytes)
+            # python-docx solo soporta .docx
             doc = docx.Document(doc_file)
             text = ""
             for paragraph in doc.paragraphs:
                 text += paragraph.text + "\n"
             return text.strip()
         except Exception as e:
-            return f"Error al procesar Word: {str(e)}"
+            return f"Error al procesar Word: {str(e)} (nota: .doc no es soportado por python-docx)"
     
     @staticmethod
     def extract_text_from_excel(file_bytes: bytes, filename: str) -> str:
         """Extrae datos de un archivo Excel"""
         try:
-            df = pd.read_excel(io.BytesIO(file_bytes))
-            # Convertir a texto estructurado
-            text = f"Archivo: {filename}\n"
-            text += f"Dimensiones: {df.shape[0]} filas, {df.shape[1]} columnas\n\n"
-            text += "Columnas: " + ", ".join(df.columns.tolist()) + "\n\n"
-            text += "Primeras 10 filas:\n"
-            text += df.head(10).to_string(index=False)
-            if df.shape[0] > 10:
-                text += f"\n\n... y {df.shape[0] - 10} filas más"
-            return text
-        except Exception as e:
-            return f"Error al procesar Excel: {str(e)}"
-    
-    @staticmethod
-    def extract_text_from_csv(file_bytes: bytes, filename: str) -> str:
-        """Extrae datos de un archivo CSV"""
-        try:
-            df = pd.read_csv(io.BytesIO(file_bytes))
-            # Convertir a texto estructurado
+            if filename.lower().endswith('.csv'):
+                df = pd.read_csv(io.BytesIO(file_bytes))
+            else:
+                df = pd.read_excel(io.BytesIO(file_bytes))
+            
+             Convertir a texto estructurado
             text = f"Archivo: {filename}\n"
             text += f"Dimensiones: {df.shape[0]} filas, {df.shape[1]} columnas\n\n"
             text += "Columnas: " + ", ".join(df.columns.tolist()) + "\n\n"
@@ -119,7 +106,7 @@ class FileProcessor:
                         try:
                             json_data = json.loads(text)
                             text = json.dumps(json_data, indent=2, ensure_ascii=False)
-                        except:
+                        except Exception:
                             pass
                     return text
                 except UnicodeDecodeError:
@@ -206,7 +193,8 @@ class FileProcessor:
         summary = f"Resumen del archivo ({file_type.upper()}):\n"
         summary += f"- Líneas: {total_lines}\n"
         summary += f"- Caracteres: {total_chars}\n"
-        if file_type == 'excel' or file_type == 'csv':
+        
+        if file_type == 'excel':
             if 'filas' in content and 'columnas' in content:
                 # Extraer información de dimensiones
                 for line in lines[:5]:
