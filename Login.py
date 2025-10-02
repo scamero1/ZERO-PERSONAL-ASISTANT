@@ -45,7 +45,6 @@ def verificar_login():
                 padding: 2rem;
                 border-radius: 16px;
                 box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
-                background: linear-gradient(145deg, #f8f9fa, #e9ecef);
             }
             
             .dark-mode .login-container {
