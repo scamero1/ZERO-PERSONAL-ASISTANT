@@ -527,26 +527,25 @@ if not st.session_state.get("autenticado", False):
 # --- SIDEBAR ZERO MEJORADO ---
 def create_sidebar():
     """Crea la barra lateral con navegación y gestión de archivos"""
-     Título de la barra lateral
+    # Título de la barra lateral
     st.markdown('<div class="sidebar-title">ZERO - Asistente Virtual</div>', unsafe_allow_html=True)
 
-     Saludo personalizado
+    # Saludo personalizado
     usuario_nombre = st.session_state.get("usuario", "Usuario")
     st.markdown(f'<div style="margin-bottom: 1rem;">Hola, <strong>{usuario_nombre}</strong></div>', unsafe_allow_html=True)
 
-     Lista de chats anteriores
+    # Lista de chats anteriores
     st.markdown('<div class="sidebar-section">', unsafe_allow_html=True)
     st.markdown('<div class="sidebar-section-title">💬 Chats anteriores</div>', unsafe_allow_html=True)
     st.markdown('<div class="chat-list">', unsafe_allow_html=True)
 
-     Renderizar chats del usuario actual
+    # Renderizar chats del usuario actual
     if st.session_state.get("user_id"):
         try:
             user_chats = db.get_user_chats(st.session_state.user_id)
-            for chat in user_chats[-10:]:   Mostrar últimos 10 chats
+            for chat in user_chats[-10:]:  # Mostrar últimos 10 chats
                 is_active = chat['chat_id'] == st.session_state.current_chat
                 preview = chat['title'][:50] + "..." if len(chat['title']) > 50 else chat['title']
-                
                 st.markdown(
                     f"""
                     <div class="chat-item {'active' if is_active else ''}">
@@ -556,14 +555,13 @@ def create_sidebar():
                     """,
                     unsafe_allow_html=True,
                 )
-                
-                 Botón para cargar el chat
+                # Botón para cargar el chat
                 if st.button("Abrir", key=f"open_{chat['id']}"):
                     st.session_state.current_chat = chat['chat_id']
-                     Cargar mensajes del chat
+                    # Cargar mensajes del chat
                     chat_messages = db.get_chat_messages(chat['chat_id'])
                     st.session_state.messages = [
-                        {"role": msg['role'], "content": msg['content']} 
+                        {"role": msg['role'], "content": msg['content']}
                         for msg in chat_messages
                     ]
                     st.rerun()
@@ -572,7 +570,7 @@ def create_sidebar():
 
     st.markdown('</div>', unsafe_allow_html=True)
 
-     Botón de nuevo chat
+    # Botón de nuevo chat
     if st.button("➕ Nuevo Chat", use_container_width=True):
         save_current_chat()
         st.session_state.current_chat = str(uuid.uuid4())
@@ -581,12 +579,12 @@ def create_sidebar():
 
     st.markdown('</div>', unsafe_allow_html=True)
 
-     Sección de archivos del usuario
+    # Sección de archivos del usuario
     st.markdown('<div class="sidebar-section">', unsafe_allow_html=True)
     st.markdown('<div class="sidebar-section-title">📁 Mis Archivos</div>', unsafe_allow_html=True)
-    
+
     if st.session_state.get("user_files"):
-         Mostrar últimos 5 archivos
+        # Mostrar últimos 5 archivos
         for file_data in st.session_state.user_files[-5:]:
             st.markdown(
                 f"""
@@ -599,10 +597,10 @@ def create_sidebar():
             )
     else:
         st.markdown('<div style="color: var(--text-secondary); font-size: 0.9rem; text-align: center; padding: 1rem;">No hay archivos subidos</div>', unsafe_allow_html=True)
-    
+
     st.markdown('</div>', unsafe_allow_html=True)
 
-     Sección de herramientas
+    # Sección de herramientas
     st.markdown('<div class="sidebar-section">', unsafe_allow_html=True)
     st.markdown('<div class="sidebar-section-title">🛠️ Herramientas</div>', unsafe_allow_html=True)
 
@@ -617,12 +615,18 @@ def create_sidebar():
     if st.button("🚪 Cerrar sesión", key="logout_btn", use_container_width=True, type="primary"):
         logout()
         st.rerun()
-    
-    return selected_option
-    
-    return selected_option
 
- --- FUNCIONES DE UTILIDAD PARA ARCHIVOS ---
+    # Navegación de página principal
+    # Actualiza la página actual según la opción seleccionada
+    if selected_option == "Chat Principal":
+        st.session_state.current_page = "chat"
+    elif selected_option == "Subir Archivos":
+        st.session_state.current_page = "files"
+    elif selected_option == "Registro de Usuarios":
+        st.session_state.current_page = "admin"
+    # Puedes agregar más elif para otras opciones si lo deseas
+
+# --- FUNCIONES DE UTILIDAD PARA ARCHIVOS ---
 def save_uploaded_file(uploaded_file, user_id):
     """Guarda un archivo subido y lo procesa"""
     try:
@@ -724,7 +728,7 @@ def save_uploaded_file(uploaded_file):
             'jpg': 'image', 'jpeg': 'image', 'png': 'image', 'gif': 'image'
         }
         file_type = file_types.get(file_type, 'unknown')
-        
+
         if file_type == 'unknown':
             return None, "Tipo de archivo no soportado"
 
@@ -737,24 +741,16 @@ def save_uploaded_file(uploaded_file):
 
         content = ""
         analysis = ""
-        
+
         if file_type == 'image':
             image_base64 = b64encode(uploaded_file.getvalue()).decode('utf-8')
             analysis = analyze_image_with_groq(image_base64, uploaded_file.name)
             content = "Imagen procesada para análisis visual"
         else:
             file_content = uploaded_file.getvalue()
-            
-            if file_type in ['pdf', 'word']:
-                processor = FileProcessor()
-                result = processor.process_file(file_content, uploaded_file.name)
-                content = result.get('content', '')[:5000]
-            else:
-                try:
-                    content = file_content.decode('utf-8')[:5000]
-                except:
-                    content = file_content.decode('latin-1')[:5000]
-            
+            processor = FileProcessor()
+            result = processor.process_file(file_content, uploaded_file.name)
+            content = result.get('content', '')[:5000]
             if content and len(content.strip()) > 50:
                 analysis = analyze_document_with_groq(content, uploaded_file.name)
             else:
@@ -1143,21 +1139,20 @@ def save_current_chat():
 # --- APLICACIÓN PRINCIPAL ---
 def main():
     """Aplicación principal"""
-    
     # Inicializar datos del usuario
     if st.session_state.get("user_id") and "user_files" not in st.session_state:
         try:
             st.session_state.user_files = db.get_user_files(st.session_state.user_id)
         except:
             st.session_state.user_files = []
-    
+
     # Navegación desde sidebar
     create_sidebar()
-    
+
     # Determinar página actual (simplificado)
     if "current_page" not in st.session_state:
         st.session_state.current_page = "chat"
-    
+
     # Renderizar página seleccionada
     if st.session_state.current_page == "chat":
         chat_page()
