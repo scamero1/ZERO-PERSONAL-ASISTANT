@@ -226,7 +226,7 @@ def load_css():
             word-wrap: break-word;
             text-align: left;
             box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-            margin-left: auto;
+            margin-left: auto.
         }}
 
         @keyframes fadeIn {{
@@ -314,18 +314,18 @@ def load_css():
             cursor: pointer;
             transition: all 0.2s;
             background-color: var(--bg-card);
-            border: 1px solid var(--border);
+            border: 1px solid var(--border).
         }}
 
         .chat-item:hover {{
             background-color: rgba(139, 92, 246, 0.1);
-            border-color: var(--purple);
+            border-color: var(--purple).
         }}
 
         .chat-item.active {{
             background-color: var(--purple);
             color: var(--text-primary);
-            border-color: var(--purple);
+            border-color: var(--purple).
         }}
 
         .chat-preview {{
@@ -333,11 +333,11 @@ def load_css():
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
-            color: var(--text-secondary);
+            color: var(--text-secondary).
         }}
 
         .chat-item.active .chat-preview {{
-            color: rgba(255,255,255,0.8);
+            color: rgba(255,255,255,0.8).
         }}
 
         /* Estilos para archivos */
@@ -346,35 +346,34 @@ def load_css():
             margin: 0.5rem 0;
             border-radius: 8px;
             background-color: var(--bg-card);
-            border: 1px solid var(--border);
-            transition: all 0.2s;
+            border: 1px solid var(--border).
         }}
 
         .file-item:hover {{
             border-color: var(--purple);
-            background-color: rgba(139, 92, 246, 0.05);
+            background-color: rgba(139, 92, 246, 0.05).
         }}
 
         .file-name {{
             font-weight: 600;
             color: var(--text-primary);
-            margin-bottom: 0.25rem;
+            margin-bottom: 0.25rem.
         }}
 
         .file-info {{
             font-size: 0.8rem;
-            color: var(--text-secondary);
+            color: var(--text-secondary).
         }}
 
         .file-actions {{
             margin-top: 0.5rem;
             display: flex;
-            gap: 0.5rem;
+            gap: 0.5rem.
         }}
 
         .file-actions button {{
             font-size: 0.8rem !important;
-            padding: 0.25rem 0.5rem !important;
+            padding: 0.25rem 0.5rem !important.
         }}
 
         @media (max-width: 768px) {{
@@ -526,7 +525,6 @@ def save_current_chat():
 
         # Asegurar que el chat exista en DB
         try:
-            # Intentar actualizar título; si el chat no existe, crearlo
             db.update_chat_title(st.session_state.current_chat, safe_text(title))
         except Exception:
             pass
@@ -536,7 +534,7 @@ def save_current_chat():
         else:
             db.update_chat_title(st.session_state.current_chat, safe_text(title))
         
-        # Guardar mensajes (nota: simple, puede duplicar si llamas muchas veces)
+        # Guardar mensajes
         for message in st.session_state.messages:
             db.add_message(
                 st.session_state.current_chat,
@@ -999,7 +997,7 @@ def file_upload_page():
     )
     
     if uploaded_file is not None:
-        # Mostrar información del archivo (sin HTML peligroso)
+        # Mostrar información del archivo (texto simple)
         st.info(f"📄 {uploaded_file.name} ({uploaded_file.size / 1024:.1f} KB)")
         
         if st.button("🚀 Procesar Archivo", type="primary"):
@@ -1094,6 +1092,10 @@ def file_upload_page():
     else:
         st.info("📭 No tienes archivos subidos aún. ¡Sube tu primer archivo!")
         
+# Alias opcional por compatibilidad con referencias antiguas
+def files_page():
+    return file_upload_page()
+
 # --- FUNCIÓN PRINCIPAL ---
 def main():
     """Función principal de la aplicación"""
