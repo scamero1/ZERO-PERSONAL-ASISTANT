@@ -1,31 +1,28 @@
-
+import os
+import io
+from typing import Dict, Any, Optional
+from PIL import Image
+import numpy as np
+import queue
+import av
 import streamlit as st
 from streamlit_webrtc import webrtc_streamer, WebRtcMode
 import speech_recognition as sr
-import av
-import numpy as np
-import queue
-from PIL import Image
 import time
 from Login import verificar_login, logout, registrar_usuario
 from base64 import b64encode
-import os
 from twilio.rest import Client
 import uuid
 from dotenv import load_dotenv
 import requests
 import json
 
-
 from database import ZeroDatabase
 from file_processor import FileProcessor
 
-
 db = ZeroDatabase()
 
-
 load_dotenv()
-
 
 st.set_page_config(
     page_title="ZERO - Asistente Virtual",
@@ -34,14 +31,12 @@ st.set_page_config(
     initial_sidebar_state="auto"
 )
 
-
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 if not GROQ_API_KEY:
     st.error("Falta GROQ_API_KEY en tu entorno (.env).")
 API_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 GROQ_TEXT_MODEL = os.getenv("GROQ_TEXT_MODEL", "llama-3.1-8b-instant")
-
 GROQ_VISION_MODEL = os.getenv("GROQ_VISION_MODEL", "llama-3.2-11b-vision-preview")
 
 BASE_HEADERS = {
@@ -67,7 +62,6 @@ def safe_text(text: str) -> str:
     except Exception:
         return text
 
-
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = {}
 if "current_chat" not in st.session_state:
@@ -83,7 +77,7 @@ if st.session_state.get("autenticado", False) and st.session_state.get("usuario"
             "messages": []
         }
 
- --- ESTILOS CSS ---
+# --- ESTILOS CSS ---
 def load_css():
     favicon_path = "favicon.ico"
     favicon_base64 = ""
@@ -97,21 +91,21 @@ def load_css():
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
         
         :root {{
-            --bg-primary: 000000;
-            --bg-card: 1a1a1a;
-            --bg-sidebar: 111111;
-            --text-primary: ffffff;
-            --text-secondary: cccccc;
-            --text-muted: 888888;
-            --purple: 8B5CF6;
-            --purple-hover: 7C3AED;
-            --purple-light: A78BFA;
-            --border: 333333;
+            --bg-primary: #000000;
+            --bg-card: #1a1a1a;
+            --bg-sidebar: #111111;
+            --text-primary: #ffffff;
+            --text-secondary: #cccccc;
+            --text-muted: #888888;
+            --purple: #8B5CF6;
+            --purple-hover: #7C3AED;
+            --purple-light: #A78BFA;
+            --border: #333333;
             --shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-            --assistant-bg: 2a2a2a;
-            --assistant-text: ffffff;
-            --user-bg: 8B5CF6;
-            --user-text: ffffff;
+            --assistant-bg: #2a2a2a;
+            --assistant-text: #ffffff;
+            --user-bg: #8B5CF6;
+            --user-text: #ffffff;
             --sidebar-width: 300px;
         }}
 
@@ -395,8 +389,8 @@ def load_css():
 
 load_css()
 
- --- INICIALIZACIÓN DE SERVICIOS ---
- Twilio (para verificación SMS)
+# --- INICIALIZACIÓN DE SERVICIOS ---
+# Twilio (para verificación SMS)
 try:
     twilio_client = Client(
         os.getenv("TWILIO_ACCOUNT_SID"),
@@ -405,7 +399,7 @@ try:
 except Exception as e:
     st.warning(f"No se pudo inicializar Twilio: {e}")
 
- --- INICIALIZACIÓN DE ESTADO ---
+# --- INICIALIZACIÓN DE ESTADO ---
 def initialize_session_state():
     if "autenticado" not in st.session_state:
         st.session_state.autenticado = False
@@ -413,6 +407,8 @@ def initialize_session_state():
         st.session_state.usuario = None
     if "rol" not in st.session_state:
         st.session_state.rol = None
+    if "user_id" not in st.session_state:
+        st.session_state.user_id = None
     
     if "messages" not in st.session_state:
         st.session_state.messages = []
@@ -428,15 +424,16 @@ def initialize_session_state():
 
 initialize_session_state()
 
- --- GROQ HELPERS ---
+# --- GROQ HELPERS ---
 def _system_prompt():
-     Crear prompt personalizado basado en el contexto del usuario
+    # Crear prompt personalizado basado en el contexto del usuario
     base_prompt = "Eres un asistente AI llamado Zero. Sé conciso, profesional y útil."
     
-     Agregar contexto de archivos si existe
+    # Agregar contexto de archivos si existe
     if st.session_state.get("user_context"):
         context_info = "\n\nContexto personalizado del usuario:\n"
-        for ctx in st.session_state.user_context[-5:]:   Últimos 5 contextos
+        # Últimos 5 contextos
+        for ctx in st.session_state.user_context[-5:]:
             context_info += f"- {ctx['context_key']}: {ctx['context_value'][:200]}...\n"
         base_prompt += context_info
     
@@ -469,7 +466,7 @@ def groq_chat_stream(history_messages, *, model=None, max_tokens=1200, temperatu
                         obj = json.loads(data)
                         delta = obj["choices"][0]["delta"].get("content")
                         if delta:
-                             FIX ENCODING por si llega interpretado raro
+                            # FIX ENCODING por si llega interpretado raro
                             yield safe_text(delta)
                     except Exception:
                         continue
@@ -498,7 +495,7 @@ def groq_chat_nonstream(history_messages, *, model=None, max_tokens=1200, temper
     except Exception as e:
         return safe_text(f"⚠️ Error en la conexión: {e}")
 
- --- FUNCIONES UTILITARIAS UI ---
+# --- FUNCIONES UTILITARIAS UI ---
 def display_message(role, content):
     """Muestra un mensaje en el chat con el estilo adecuado."""
     if role == "assistant":
@@ -514,21 +511,32 @@ def display_message(role, content):
         )
 
 def save_current_chat():
-    """Guarda el chat actual en el historial."""
+    """Guarda el chat actual en el historial y DB."""
     if st.session_state.messages and st.session_state.get("usuario") and st.session_state.get("user_id"):
         first_message = st.session_state.messages[0]["content"] if st.session_state.messages else "Nuevo chat"
         title = first_message[:30] + "..." if len(first_message) > 30 else first_message
         
-         Actualizar en session_state
+        # Actualizar en session_state
+        if st.session_state.usuario not in st.session_state.chat_history:
+            st.session_state.chat_history[st.session_state.usuario] = {}
         st.session_state.chat_history[st.session_state.usuario][st.session_state.current_chat] = {
             "title": safe_text(title),
             "messages": st.session_state.messages.copy(),
         }
+
+        # Asegurar que el chat exista en DB
+        try:
+            # Intentar actualizar título; si el chat no existe, crearlo
+            db.update_chat_title(st.session_state.current_chat, safe_text(title))
+        except Exception:
+            pass
+        user_chats = db.get_user_chats(st.session_state.user_id)
+        if not any(c["id"] == st.session_state.current_chat for c in user_chats):
+            st.session_state.current_chat = db.create_chat(st.session_state.user_id, safe_text(title))
+        else:
+            db.update_chat_title(st.session_state.current_chat, safe_text(title))
         
-         Guardar en base de datos
-        db.update_chat_title(st.session_state.current_chat, safe_text(title))
-        
-         Guardar mensajes nuevos
+        # Guardar mensajes (nota: simple, puede duplicar si llamas muchas veces)
         for message in st.session_state.messages:
             db.add_message(
                 st.session_state.current_chat,
@@ -543,27 +551,27 @@ def load_chat(chat_id):
         st.session_state.messages = st.session_state.chat_history[st.session_state.usuario][chat_id]["messages"].copy()
         st.rerun()
 
- --- BARRA LATERAL MEJORADA ---
+# --- BARRA LATERAL MEJORADA ---
 def create_sidebar():
     """Crea la barra lateral con navegación y gestión de archivos"""
-     Título de la barra lateral
+    # Título de la barra lateral
     st.markdown('<div class="sidebar-title">ZERO - Asistente Virtual</div>', unsafe_allow_html=True)
 
-     Saludo personalizado
+    # Saludo personalizado
     usuario_nombre = st.session_state.get("usuario", "Usuario")
     st.markdown(f'<div style="margin-bottom: 1rem;">Hola, <strong>{usuario_nombre}</strong></div>', unsafe_allow_html=True)
 
-     Lista de chats anteriores
+    # Lista de chats anteriores
     st.markdown('<div class="sidebar-section">', unsafe_allow_html=True)
     st.markdown('<div class="sidebar-section-title">💬 Chats anteriores</div>', unsafe_allow_html=True)
     st.markdown('<div class="chat-list">', unsafe_allow_html=True)
 
-     Renderizar chats del usuario actual
+    # Renderizar chats del usuario actual
     if st.session_state.get("user_id"):
         try:
             user_chats = db.get_user_chats(st.session_state.user_id)
-            for chat in user_chats[-10:]:   Mostrar últimos 10 chats
-                is_active = chat['chat_id'] == st.session_state.current_chat
+            for chat in user_chats[-10:]:  # Mostrar últimos 10 chats
+                is_active = chat['id'] == st.session_state.current_chat
                 preview = chat['title'][:50] + "..." if len(chat['title']) > 50 else chat['title']
                 
                 st.markdown(
@@ -576,22 +584,22 @@ def create_sidebar():
                     unsafe_allow_html=True,
                 )
                 
-                 Botón para cargar el chat
+                # Botón para cargar el chat
                 if st.button("Abrir", key=f"open_{chat['id']}"):
-                    st.session_state.current_chat = chat['chat_id']
-                     Cargar mensajes del chat
-                    chat_messages = db.get_chat_messages(chat['chat_id'])
+                    st.session_state.current_chat = chat['id']
+                    # Cargar mensajes del chat
+                    chat_messages = db.get_chat_messages(chat['id'])
                     st.session_state.messages = [
                         {"role": msg['role'], "content": msg['content']} 
                         for msg in chat_messages
                     ]
                     st.rerun()
-        except Exception as e:
+        except Exception:
             st.write("No hay chats anteriores")
 
     st.markdown('</div>', unsafe_allow_html=True)
 
-     Botón de nuevo chat
+    # Botón de nuevo chat
     if st.button("➕ Nuevo Chat", use_container_width=True):
         save_current_chat()
         st.session_state.current_chat = str(uuid.uuid4())
@@ -600,26 +608,28 @@ def create_sidebar():
 
     st.markdown('</div>', unsafe_allow_html=True)
 
-     Sección de archivos del usuario
+    # Sección de archivos del usuario
     st.markdown('<div class="sidebar-section">', unsafe_allow_html=True)
     st.markdown('<div class="sidebar-section-title">📁 Mis Archivos</div>', unsafe_allow_html=True)
     
     if st.session_state.get("user_files"):
-         Mostrar últimos 5 archivos
+        # Mostrar últimos 5 archivos
         for file_data in st.session_state.user_files[-5:]:
-            st.markdown("""
-            <div style="background-color: #d9edf7; padding: 20px; border-radius: 8px; color: #31708f; text-align: center;">
-            <h4>Sube tus archivos aquí</h4>
-            </div>
-            """, unsafe_allow_html=True)
-
+            st.markdown(
+                f"""
+                <div class="file-item">
+                    <div class="file-name">📄 {file_data['filename']}</div>
+                    <div class="file-info">{file_data['file_type'].upper()} • {file_data['file_size'] / 1024:.1f} KB</div>
+                </div>
+                """,
+                unsafe_allow_html=True
             )
     else:
         st.markdown('<div style="color: var(--text-secondary); font-size: 0.9rem; text-align: center; padding: 1rem;">No hay archivos subidos</div>', unsafe_allow_html=True)
     
     st.markdown('</div>', unsafe_allow_html=True)
 
-     Sección de herramientas
+    # Sección de herramientas
     st.markdown('<div class="sidebar-section">', unsafe_allow_html=True)
     st.markdown('<div class="sidebar-section-title">🛠️ Herramientas</div>', unsafe_allow_html=True)
 
@@ -636,41 +646,43 @@ def create_sidebar():
         st.rerun()
     
     return selected_option
-    
-    return selected_option
 
- --- FUNCIONES DE UTILIDAD PARA ARCHIVOS ---
+# --- FUNCIONES DE UTILIDAD PARA ARCHIVOS ---
 def save_uploaded_file(uploaded_file, user_id):
     """Guarda un archivo subido y lo procesa"""
     try:
-         Crear directorio del usuario si no existe
+        # Crear directorio del usuario si no existe
         user_dir = f"uploads/{user_id}"
         os.makedirs(user_dir, exist_ok=True)
         
-         Guardar archivo físico
+        # Guardar archivo físico
         file_path = os.path.join(user_dir, uploaded_file.name)
         with open(file_path, "wb") as f:
             f.write(uploaded_file.getbuffer())
         
-         Procesar archivo
+        # Procesar archivo con FileProcessor (usa BYTES + nombre)
         processor = FileProcessor()
-        content, summary, error = processor.process_file(file_path)
+        file_bytes = uploaded_file.getvalue()
+        result = processor.process_file(file_bytes, uploaded_file.name)
+        content = result.get("content")
+        summary = processor.generate_summary(content or "", result.get("file_type", "desconocido"))
+        error = result.get("error")
         
         if error:
             return None, error
         
-         Guardar en base de datos
+        # Guardar en base de datos
         file_id = db.save_file(
             user_id=user_id,
             filename=uploaded_file.name,
             file_path=file_path,
-            file_type=FileProcessor.get_file_type(uploaded_file.name),
+            file_type=result.get("file_type", "unknown"),
             file_size=uploaded_file.size,
             content_extracted=content,
             analysis_summary=summary
         )
         
-         Agregar al contexto del usuario
+        # Agregar al contexto del usuario
         if content:
             context_key = f"Archivo: {uploaded_file.name}"
             db.save_user_context(user_id, context_key, content, file_id)
@@ -724,22 +736,24 @@ def get_personalized_context(user_id, query):
         if not user_context:
             return ""
         
-         Buscar contexto relevante basado en la consulta
+        # Buscar contexto relevante basado en la consulta
         relevant_context = []
         query_lower = query.lower()
         
         for context in user_context:
-            context_content = context['context_data'].lower()
-             Búsqueda simple por palabras clave
+            # En DB es 'context_value'
+            context_content = (context.get('context_value') or "").lower()
+            # Búsqueda simple por palabras clave
             if any(word in context_content for word in query_lower.split() if len(word) > 3):
                 relevant_context.append({
-                    'key': context['context_key'],
-                    'content': context['context_data'][:500] + "..." if len(context['context_data']) > 500 else context['context_data']
+                    'key': context.get('context_key', 'Contexto'),
+                    'content': (context.get('context_value') or "")[:500] + ("..." if len(context.get('context_value') or "") > 500 else "")
                 })
         
         if relevant_context:
             context_text = "\n\nContexto personalizado basado en tus archivos:\n"
-            for ctx in relevant_context[:3]:   Limitar a 3 contextos más relevantes
+            # Limitar a 3 contextos más relevantes
+            for ctx in relevant_context[:3]:
                 context_text += f"\n**{ctx['key']}:**\n{ctx['content']}\n"
             return context_text
         
@@ -749,12 +763,12 @@ def get_personalized_context(user_id, query):
         print(f"Error obteniendo contexto personalizado: {e}")
         return ""
 
- --- FUNCIONES DE CHAT MEJORADAS ---
+# --- FUNCIONES DE CHAT MEJORADAS ---
 def chat_page():
     """Página principal de chat con contexto personalizado"""
     st.title("💬 Chat con Zero")
     
-     Mostrar mensajes del chat actual
+    # Mostrar mensajes del chat actual
     chat_container = st.container()
     with chat_container:
         if st.session_state.messages:
@@ -762,39 +776,40 @@ def chat_page():
                 with st.chat_message(message["role"]):
                     st.markdown(message["content"])
     
-     Input del usuario
+    # Input del usuario
     if prompt := st.chat_input("Escribe tu mensaje aquí..."):
-         Agregar mensaje del usuario
+        # Agregar mensaje del usuario
         st.session_state.messages.append({"role": "user", "content": prompt})
         
         with st.chat_message("user"):
             st.markdown(prompt)
         
-         Obtener contexto personalizado
+        # Obtener contexto personalizado
         personalized_context = ""
         if st.session_state.get("user_id"):
             personalized_context = get_personalized_context(st.session_state.user_id, prompt)
         
-         Preparar mensaje con contexto
+        # Preparar mensaje con contexto
         enhanced_prompt = prompt
         if personalized_context:
             enhanced_prompt = f"{prompt}{personalized_context}"
         
-         Generar respuesta
+        # Generar respuesta
         with st.chat_message("assistant"):
             message_placeholder = st.empty()
             full_response = ""
             
             try:
-                 Preparar mensajes para la API
+                # Preparar mensajes para la API
                 messages_for_api = []
-                for msg in st.session_state.messages[:-1]:   Excluir el último mensaje del usuario
+                # Excluir el último mensaje del usuario (ya lo agregamos como enhanced)
+                for msg in st.session_state.messages[:-1]:
                     messages_for_api.append({
                         "role": msg["role"],
                         "content": msg["content"]
                     })
                 
-                 Agregar el mensaje actual con contexto
+                # Agregar el mensaje actual con contexto
                 messages_for_api.append({
                     "role": "user",
                     "content": enhanced_prompt
@@ -839,46 +854,16 @@ def chat_page():
                 message_placeholder.markdown(f"❌ {error_msg}")
                 full_response = error_msg
         
-         Guardar respuesta del asistente
+        # Guardar respuesta del asistente
         st.session_state.messages.append({"role": "assistant", "content": full_response})
         
-         Guardar chat en base de datos
+        # Guardar chat en base de datos
         save_current_chat()
         
-         Auto-scroll
+        # Auto-scroll
         st.rerun()
 
-def save_current_chat():
-    """Guarda el chat actual en la base de datos"""
-    if st.session_state.get("user_id") and st.session_state.messages:
-        try:
-             Generar título del chat basado en el primer mensaje
-            title = "Nuevo chat"
-            if st.session_state.messages:
-                first_user_msg = next((msg['content'] for msg in st.session_state.messages if msg['role'] == 'user'), "")
-                if first_user_msg:
-                    title = first_user_msg[:50] + "..." if len(first_user_msg) > 50 else first_user_msg
-            
-             Guardar o actualizar chat
-            chat_id = db.save_chat(
-                user_id=st.session_state.user_id,
-                chat_id=st.session_state.current_chat,
-                title=title
-            )
-            
-             Guardar mensajes
-            for i, message in enumerate(st.session_state.messages):
-                db.save_message(
-                    chat_id=chat_id,
-                    role=message['role'],
-                    content=message['content'],
-                    message_order=i
-                )
-                
-        except Exception as e:
-            print(f"Error guardando chat: {e}")
-
- --- FUNCIONES EXISTENTES MEJORADAS ---
+# --- PÁGINAS EXISTENTES MEJORADAS ---
 def image_page():
     """Página de análisis de imágenes mejorada"""
     st.title("🖼️ Análisis de Imágenes")
@@ -890,28 +875,29 @@ def image_page():
     )
     
     if uploaded_file is not None:
-         Mostrar imagen
+        # Mostrar imagen
         image = Image.open(uploaded_file)
         st.image(image, caption=uploaded_file.name, use_column_width=True)
         
         if st.button("🔍 Analizar Imagen", type="primary"):
             with st.spinner("Analizando imagen..."):
-                 Convertir a base64
+                # Convertir a base64
                 image_base64 = b64encode(uploaded_file.getvalue()).decode('utf-8')
                 
-                 Analizar con Groq Vision
+                # Analizar con Groq Vision
                 analysis = analyze_image_with_groq(image_base64, uploaded_file.name)
                 
-                 Mostrar resultado
+                # Mostrar resultado
                 st.subheader("📋 Análisis de la Imagen")
                 st.write(analysis)
                 
-                 Guardar análisis si el usuario está autenticado
+                # Guardar análisis si el usuario está autenticado
                 if st.session_state.get("user_id"):
                     try:
+                        image_disk_path = f"uploads/{st.session_state.user_id}/{uploaded_file.name}"
                         db.save_image_analysis(
                             user_id=st.session_state.user_id,
-                            image_path=f"temp/{uploaded_file.name}",
+                            image_path=image_disk_path,
                             analysis_result=analysis,
                             model_used=GROQ_VISION_MODEL
                         )
@@ -924,7 +910,7 @@ def audio_page():
     st.title("🎤 Transcripción de Audio")
     st.write("Habla y Zero convertirá tu voz a texto.")
     
-     Configuración de WebRTC
+    # Configuración de WebRTC
     webrtc_ctx = webrtc_streamer(
         key="speech-to-text",
         mode=WebRtcMode.SENDONLY,
@@ -935,7 +921,7 @@ def audio_page():
     if webrtc_ctx.audio_receiver:
         st.write("🎙️ Grabando... Habla ahora")
         
-         Procesar audio (implementación simplificada)
+        # Procesar audio (implementación simplificada)
         audio_frames = []
         while True:
             try:
@@ -946,8 +932,8 @@ def audio_page():
         
         if audio_frames:
             st.write("🔄 Procesando audio...")
-             Aquí iría la lógica de transcripción
-            st.write("📝 Transcripción: [Funcionalidad en desarrollo]")
+            # Aquí iría la lógica de transcripción
+            st.write("📝 **Transcripción:** [Funcionalidad en desarrollo]")
 
 def register_page():
     """Página de registro de usuarios (solo admin)"""
@@ -984,17 +970,18 @@ def register_page():
                         st.error("❌ Error al registrar usuario. Puede que ya exista.")
                 except Exception as e:
                     st.error(f"❌ Error: {str(e)}")
+
 def file_upload_page():
     """Página para subir y gestionar archivos"""
     st.title("📁 Gestión de Archivos")
     st.write("Sube documentos e imágenes para que Zero pueda usarlos en las conversaciones.")
     
-     Verificar que el usuario esté autenticado
+    # Verificar que el usuario esté autenticado
     if not st.session_state.get("usuario"):
         st.error("❌ Error de sesión. Por favor, vuelve a iniciar sesión.")
         return
     
-     Obtener user_id desde la base de datos usando el username
+    # Obtener user_id desde la base de datos usando el username
     username = st.session_state.usuario
     user_id = db.get_user_id_by_username(username)
     
@@ -1002,7 +989,7 @@ def file_upload_page():
         st.error("❌ No se pudo obtener la información del usuario.")
         return
     
-     Sección de subida de archivos
+    # Sección de subida de archivos
     st.subheader("📤 Subir Nuevo Archivo")
     
     uploaded_file = st.file_uploader(
@@ -1012,12 +999,12 @@ def file_upload_page():
     )
     
     if uploaded_file is not None:
-         Mostrar información del archivo
-        st.info(f"📄 **{uploaded_file.name}** ({uploaded_file.size / 1024:.1f} KB)")
+        # Mostrar información del archivo (sin HTML peligroso)
+        st.info(f"📄 {uploaded_file.name} ({uploaded_file.size / 1024:.1f} KB)")
         
         if st.button("🚀 Procesar Archivo", type="primary"):
             with st.spinner("Procesando archivo..."):
-                 Guardar y procesar archivo
+                # Guardar y procesar archivo
                 file_id, error = save_uploaded_file(uploaded_file, user_id)
                 
                 if error:
@@ -1025,13 +1012,13 @@ def file_upload_page():
                 else:
                     st.success("✅ Archivo procesado y guardado exitosamente")
                     
-                     Si es una imagen, realizar análisis con Groq Vision
+                    # Si es una imagen, realizar análisis con Groq Vision
                     if uploaded_file.type.startswith('image/'):
                         with st.spinner("Analizando imagen con Groq Vision..."):
                             image_base64 = b64encode(uploaded_file.getvalue()).decode('utf-8')
                             analysis = analyze_image_with_groq(image_base64, uploaded_file.name)
                             
-                             Guardar análisis
+                            # Guardar análisis
                             db.save_image_analysis(
                                 user_id=user_id,
                                 image_path=f"uploads/{user_id}/{uploaded_file.name}",
@@ -1040,22 +1027,22 @@ def file_upload_page():
                                 archivo_id=file_id
                             )
                             
-                             Agregar análisis al contexto
+                            # Agregar análisis al contexto
                             context_key = f"Análisis de imagen: {uploaded_file.name}"
                             db.save_user_context(user_id, context_key, analysis, file_id)
                             
                             st.success("🖼️ Imagen analizada con Groq Vision")
                     
-                     Actualizar archivos en sesión
+                    # Actualizar archivos y contexto en sesión
                     st.session_state.user_files = db.get_user_files(user_id)
                     st.session_state.user_context = db.get_user_context(user_id)
                     
                     st.rerun()
     
-     Sección de archivos existentes
+    # Sección de archivos existentes
     st.subheader("📋 Archivos Subidos")
     
-     Cargar archivos del usuario si no están en sesión
+    # Cargar archivos del usuario si no están en sesión
     if "user_files" not in st.session_state:
         st.session_state.user_files = db.get_user_files(user_id)
     
@@ -1074,17 +1061,17 @@ def file_upload_page():
                 
                 with col2:
                     if st.button(f"🗑️ Eliminar", key=f"delete_{file_data['id']}"):
-                         Eliminar archivo físico
+                        # Eliminar archivo físico
                         try:
                             if os.path.exists(file_data['file_path']):
                                 os.remove(file_data['file_path'])
-                        except:
+                        except Exception:
                             pass
                         
-                         Eliminar de base de datos
+                        # Eliminar de base de datos
                         db.delete_file(file_data['id'], user_id)
                         
-                         Actualizar sesión
+                        # Actualizar sesión
                         st.session_state.user_files = db.get_user_files(user_id)
                         st.session_state.user_context = db.get_user_context(user_id)
                         
@@ -1093,51 +1080,53 @@ def file_upload_page():
                     
                     if st.button(f"💬 Usar en Chat", key=f"use_{file_data['id']}"):
                         if file_data.get('content_extracted'):
-                             Agregar contenido al chat actual
+                            # Agregar contenido al chat actual
                             content_message = f"📄 **Contenido de {file_data['filename']}:**\n\n{file_data['content_extracted'][:1000]}..."
                             st.session_state.messages.append({
                                 "role": "user", 
                                 "content": content_message
                             })
                             
-                             Cambiar a página de chat
+                            # Cambiar a página de chat
                             st.session_state.menu_option = "Chat Principal"
                             st.success(f"📄 Contenido de {file_data['filename']} agregado al chat")
                             st.rerun()
     else:
         st.info("📭 No tienes archivos subidos aún. ¡Sube tu primer archivo!")
         
- --- FUNCIÓN PRINCIPAL ---
+# --- FUNCIÓN PRINCIPAL ---
 def main():
     """Función principal de la aplicación"""
     load_css()
     
-     Verificar autenticación
+    # Verificar autenticación
     if not st.session_state.get("autenticado", False):
         verificar_login()
         return
     
-     Inicializar base de datos y cargar datos del usuario
+    # Inicializar base de datos y cargar datos del usuario
     if st.session_state.get("user_id") and "user_files" not in st.session_state:
         st.session_state.user_files = db.get_user_files(st.session_state.user_id)
         st.session_state.user_context = db.get_user_context(st.session_state.user_id)
         
-         Cargar historial de chats
+        # Cargar historial de chats
         user_chats = db.get_user_chats(st.session_state.user_id)
-        if user_chats:
-             Cargar mensajes del chat actual
-            current_chat_messages = db.get_chat_messages(st.session_state.current_chat)
-            if current_chat_messages:
-                st.session_state.messages = [
-                    {"role": msg['role'], "content": msg['content']} 
-                    for msg in current_chat_messages
-                ]
+        # Asegurar que el chat actual exista en DB
+        if not user_chats or not any(c["id"] == st.session_state.current_chat for c in user_chats):
+            st.session_state.current_chat = db.create_chat(st.session_state.user_id, "Nuevo chat")
+        # Cargar mensajes del chat actual
+        current_chat_messages = db.get_chat_messages(st.session_state.current_chat)
+        if current_chat_messages:
+            st.session_state.messages = [
+                {"role": msg['role'], "content": msg['content']} 
+                for msg in current_chat_messages
+            ]
     
-     Sidebar con navegación
+    # Sidebar con navegación
     with st.sidebar:
         selected_option = create_sidebar()
     
-     Navegación principal
+    # Navegación principal
     if selected_option == "Chat Principal":
         chat_page()
     elif selected_option == "Subir Archivos":
