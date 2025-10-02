@@ -27,7 +27,7 @@ class ZeroDatabase:
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
-        # Tabla de usuarios
+         Tabla de usuarios
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS usuarios (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -40,7 +40,7 @@ class ZeroDatabase:
             )
         """)
         
-        # Tabla de chats
+         Tabla de chats
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS chats (
                 id TEXT PRIMARY KEY,
@@ -52,7 +52,7 @@ class ZeroDatabase:
             )
         """)
         
-        # Tabla de mensajes
+         Tabla de mensajes
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS mensajes (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -65,7 +65,7 @@ class ZeroDatabase:
             )
         """)
         
-        # Tabla de archivos subidos
+         Tabla de archivos subidos
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS archivos (
                 id TEXT PRIMARY KEY,
@@ -81,7 +81,7 @@ class ZeroDatabase:
             )
         """)
         
-        # Tabla de análisis de imágenes
+         Tabla de análisis de imágenes
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS analisis_imagenes (
                 id TEXT PRIMARY KEY,
@@ -96,7 +96,7 @@ class ZeroDatabase:
             )
         """)
         
-        # Tabla de contexto personalizado por usuario
+         Tabla de contexto personalizado por usuario
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS contexto_usuario (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -117,7 +117,7 @@ class ZeroDatabase:
         """Obtiene una conexión a la base de datos"""
         return sqlite3.connect(self.db_path)
     
-    # === MÉTODOS PARA USUARIOS ===
+     === MÉTODOS PARA USUARIOS ===
     def create_user(self, username: str, password_hash: str, rol: str = "usuario", nfc_uid: str = None) -> bool:
         """Crea un nuevo usuario"""
         try:
@@ -164,7 +164,7 @@ class ZeroDatabase:
         conn.commit()
         conn.close()
     
-    # === MÉTODOS PARA CHATS ===
+     === MÉTODOS PARA CHATS ===
     def create_chat(self, user_id: int, title: str = "Nuevo chat") -> str:
         """Crea un nuevo chat"""
         chat_id = str(uuid.uuid4())
@@ -211,19 +211,19 @@ class ZeroDatabase:
         conn.commit()
         conn.close()
     
-    # === MÉTODOS PARA MENSAJES ===
+     === MÉTODOS PARA MENSAJES ===
     def add_message(self, chat_id: str, role: str, content: str, metadata: Dict = None):
         """Añade un mensaje a un chat"""
         conn = self.get_connection()
         cursor = conn.cursor()
         
-        # Actualizar timestamp del chat
+         Actualizar timestamp del chat
         cursor.execute(
             "UPDATE chats SET updated_at = CURRENT_TIMESTAMP WHERE id = ?",
             (chat_id,)
         )
         
-        # Insertar mensaje
+         Insertar mensaje
         metadata_json = json.dumps(metadata) if metadata else None
         cursor.execute(
             "INSERT INTO mensajes (chat_id, role, content, metadata) VALUES (?, ?, ?, ?)",
@@ -257,7 +257,7 @@ class ZeroDatabase:
             })
         return messages
     
-    # === MÉTODOS PARA ARCHIVOS ===
+     === MÉTODOS PARA ARCHIVOS ===
     def save_file(self, user_id: int, filename: str, file_type: str, file_size: int, 
                   file_path: str, content_extracted: str = None, analysis_summary: str = None) -> str:
         """Guarda información de un archivo subido"""
@@ -322,7 +322,7 @@ class ZeroDatabase:
             }
         return None
     
-    # === MÉTODOS PARA ANÁLISIS DE IMÁGENES ===
+     === MÉTODOS PARA ANÁLISIS DE IMÁGENES ===
     def save_image_analysis(self, user_id: int, image_path: str, analysis_result: str, 
                            model_used: str, archivo_id: str = None) -> str:
         """Guarda un análisis de imagen"""
@@ -362,7 +362,7 @@ class ZeroDatabase:
             })
         return analyses
     
-    # === MÉTODOS PARA CONTEXTO PERSONALIZADO ===
+     === MÉTODOS PARA CONTEXTO PERSONALIZADO ===
     def save_user_context(self, user_id: int, context_key: str, context_value: str, source_file_id: str = None):
         """Guarda contexto personalizado del usuario"""
         conn = self.get_connection()
@@ -403,13 +403,13 @@ class ZeroDatabase:
             conn = self.get_connection()
             cursor = conn.cursor()
             
-            # Eliminar análisis de imágenes asociados
+             Eliminar análisis de imágenes asociados
             cursor.execute("DELETE FROM analisis_imagenes WHERE archivo_id = ?", (file_id,))
             
-            # Eliminar contexto asociado
+             Eliminar contexto asociado
             cursor.execute("DELETE FROM contexto_usuario WHERE source_file_id = ?", (file_id,))
             
-            # Eliminar archivo
+             Eliminar archivo
             cursor.execute("DELETE FROM archivos WHERE id = ? AND user_id = ?", (file_id, user_id))
             
             conn.commit()
@@ -418,5 +418,5 @@ class ZeroDatabase:
         except Exception:
             return False
 
-# Instancia global de la base de datos
+ Instancia global de la base de datos
 db = ZeroDatabase()
