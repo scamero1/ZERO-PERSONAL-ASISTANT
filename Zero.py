@@ -221,17 +221,18 @@ def load_css():
             font-size: 0.875rem;
         }
 
-        .chat-item:hover {
-            background: rgba(139, 92, 246, 0.1);
-            border-color: var(--accent-primary);
-            transform: translateX(5px);
-        }
-
-        .chat-item.active {
-            background: var(--card-bg);
-            border-color: var(--accent-primary);
-            box-shadow: var(--shadow-sm);
-        }
+        .user-message {{
+            background-color: var(--user-bg);
+            color: var(--user-text);
+            padding: 0.8rem 1.2rem;
+            border-radius: 18px 18px 4px 18px;
+            max-width: 85%;
+            align-self: flex-end;
+            word-wrap: break-word;
+            text-align: left;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            margin-left: auto;
+        }}
 
         .chat-title {
             font-weight: 600;
@@ -295,234 +296,255 @@ def load_css():
             animation: slideIn 0.4s ease;
         }
 
-        @keyframes slideIn {
-            from {
-                opacity: 0;
-                transform: translateY(20px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        .user-message {
-            background: var(--user-msg-bg);
-            border-left: 4px solid var(--accent-primary);
-        }
-
-        .assistant-message {
-            background: var(--assistant-msg-bg);
-            border-left: 4px solid var(--accent-secondary);
-        }
-
-        .message-content {
-            max-width: 800px;
-            margin: 0 auto;
-            display: flex;
-            gap: 1rem;
-            align-items: flex-start;
-        }
-
-        .message-avatar {
-            width: 40px;
-            height: 40px;
-            border-radius: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 600;
-            flex-shrink: 0;
-            font-size: 1rem;
-            background: var(--accent-gradient);
-            color: white;
-        }
-
-        .assistant-avatar {
-            background: var(--card-bg);
-            border: 2px solid var(--accent-primary);
-        }
-
-        .message-text {
-            flex: 1;
-            line-height: 1.6;
-            font-size: 0.95rem;
-            color: var(--text-primary);
-            padding: 0.5rem 0;
-        }
-
-        /* Input area moderno */
-        .input-container {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            background: var(--secondary-bg);
-            border-top: 1px solid var(--border-color);
-            padding: 1.5rem 0;
-            backdrop-filter: blur(20px);
-        }
-
-        .input-wrapper {
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 0 2rem;
-        }
-
-        .stChatInput > div > div {
-            background: var(--card-bg) !important;
-            border: 2px solid var(--border-color) !important;
-            border-radius: 20px !important;
-            padding: 1rem 1.5rem !important;
-            box-shadow: var(--shadow-md) !important;
-            transition: all 0.3s ease !important;
-        }
-
-        .stChatInput > div > div:focus-within {
-            border-color: var(--accent-primary) !important;
-            box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.2) !important;
-        }
-
-        .stChatInput input {
-            color: var(--text-primary) !important;
-            font-size: 1rem !important;
-            background: transparent !important;
-        }
-
-        /* Scrollbar personalizada */
-        ::-webkit-scrollbar {
-            width: 8px;
-        }
-
-        ::-webkit-scrollbar-track {
-            background: var(--secondary-bg);
-        }
-
-        ::-webkit-scrollbar-thumb {
-            background: var(--accent-gradient);
-            border-radius: 4px;
-        }
-
-        ::-webkit-scrollbar-thumb:hover {
-            background: var(--accent-secondary);
-        }
-
-        /* Ecuaciones y código */
-        .latex-formula {
-            background: rgba(139, 92, 246, 0.1);
-            padding: 1rem;
-            border-radius: 8px;
-            margin: 0.5rem 0;
-            font-family: 'CMU Serif', serif;
-            text-align: center;
-            border: 1px solid var(--accent-primary);
-            color: var(--accent-secondary);
-        }
-
-        .math-block {
-            background: rgba(139, 92, 246, 0.05);
-            padding: 1.25rem;
-            border-radius: 12px;
-            margin: 1rem 0;
-            border-left: 4px solid var(--accent-primary);
-        }
-
-        .code-block {
-            background: var(--card-bg);
-            padding: 1rem;
-            border-radius: 8px;
-            margin: 0.5rem 0;
-            font-family: 'Monaco', 'Menlo', monospace;
-            font-size: 0.875rem;
-            overflow-x: auto;
-            border: 1px solid var(--border-color);
-        }
-
-        /* Página de archivos */
-        .files-container {
-            max-width: 900px;
-            margin: 0 auto;
-            padding: 2rem;
-        }
-
-        .upload-section {
-            background: var(--card-bg);
-            border: 2px dashed var(--border-color);
-            border-radius: 20px;
-            padding: 3rem;
-            text-align: center;
-            margin-bottom: 2rem;
-            transition: all 0.3s ease;
-        }
-
-        .upload-section:hover {
-            border-color: var(--accent-primary);
-            background: rgba(139, 92, 246, 0.05);
-        }
-
-        .file-card {
-            background: var(--card-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 16px;
-            padding: 1.5rem;
+        .chat-list {{
+            max-height: 40vh;
+            overflow-y: auto;
             margin-bottom: 1rem;
-            transition: all 0.3s ease;
-            position: relative;
+        }}
+
+        .chat-item {{
+            padding: 0.5rem;
+            margin: 0.25rem 0;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            background-color: var(--bg-card);
+            border: 1px solid var(--border);
+        }}
+
+        .chat-item:hover {{
+            background-color: rgba(139, 92, 246, 0.1);
+            border-color: var(--purple);
+        }}
+
+        .chat-item.active {{
+            background-color: var(--purple);
+            color: var(--text-primary);
+            border-color: var(--purple);
+        }}
+
+        .chat-preview {{
+            font-size: 0.8rem;
+            white-space: nowrap;
             overflow: hidden;
-        }
-
-        .file-card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 3px;
-            background: var(--accent-gradient);
-        }
-
-        .file-card:hover {
-            border-color: var(--accent-primary);
-            transform: translateY(-5px);
-            box-shadow: var(--shadow-lg);
-        }
-
-        .file-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            margin-bottom: 1rem;
-        }
-
-        .file-details {
-            flex: 1;
-        }
-
-        .file-name {
-            font-weight: 700;
-            color: var(--text-primary);
-            margin-bottom: 0.5rem;
-            font-size: 1.1rem;
-        }
-
-        .file-meta {
-            font-size: 0.875rem;
+            text-overflow: ellipsis;
             color: var(--text-secondary);
-        }
+        }}
 
-        .file-actions {
+        .chat-item.active .chat-preview {{
+            color: rgba(255,255,255,0.8);
+        }}
+
+        /* Estilos para archivos */
+        .file-item {{
+            padding: 0.75rem;
+            margin: 0.5rem 0;
+            border-radius: 8px;
+            background-color: var(--bg-card);
+            border: 1px solid var(--border);
+            transition: all 0.2s;
+        }}
+
+        .file-item:hover {{
+            border-color: var(--purple);
+            background-color: rgba(139, 92, 246, 0.05);
+        }}
+
+        .file-name {{
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 0.25rem;
+        }}
+
+        .file-info {{
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }}
+
+        .file-actions {{
+            margin-top: 0.5rem;
             display: flex;
             gap: 0.5rem;
-        }
+        }}
+
+        .file-actions button {{
+            font-size: 0.8rem !important;
+            padding: 0.25rem 0.5rem !important;
+        }}
+
+        @media (max-width: 768px) {{
+            .sidebar .sidebar-content {{ width: 100%; }}
+            .chat-container {{ max-height: 60vh; }}
+            .assistant-message, .user-message {{ max-width: 90%; }}
+        }}
     </style>
+
+    <link rel="icon" href="data:image/x-icon;base64,{favicon_base64}" type="image/x-icon">
     """, unsafe_allow_html=True)
 
 load_css()
 
-# --- VERIFICACIÓN DE AUTENTICACIÓN ---
-if not st.session_state.get("autenticado", False):
-    verificar_login()
-    st.stop()
+# --- INICIALIZACIÓN DE SERVICIOS ---
+# Twilio (para verificación SMS)
+try:
+    twilio_client = Client(
+        os.getenv("TWILIO_ACCOUNT_SID"),
+        os.getenv("TWILIO_AUTH_TOKEN")
+    )
+except Exception as e:
+    st.warning(f"No se pudo inicializar Twilio: {e}")
+
+# --- INICIALIZACIÓN DE ESTADO ---
+def initialize_session_state():
+    if "autenticado" not in st.session_state:
+        st.session_state.autenticado = False
+    if "usuario" not in st.session_state:
+        st.session_state.usuario = None
+    if "rol" not in st.session_state:
+        st.session_state.rol = None
+    if "user_id" not in st.session_state:
+        st.session_state.user_id = None
+    
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+    if "thinking" not in st.session_state:
+        st.session_state.thinking = False
+    
+    if "sidebar_collapsed" not in st.session_state:
+        st.session_state.sidebar_collapsed = False
+    if "chat_history" not in st.session_state:
+        st.session_state.chat_history = {}
+    if "current_chat" not in st.session_state:
+        st.session_state.current_chat = str(uuid.uuid4())
+
+initialize_session_state()
+
+# --- GROQ HELPERS ---
+def _system_prompt():
+    # Crear prompt personalizado basado en el contexto del usuario
+    base_prompt = "Eres un asistente AI llamado Zero. Sé conciso, profesional y útil."
+    
+    # Agregar contexto de archivos si existe
+    if st.session_state.get("user_context"):
+        context_info = "\n\nContexto personalizado del usuario:\n"
+        # Últimos 5 contextos
+        for ctx in st.session_state.user_context[-5:]:
+            context_info += f"- {ctx['context_key']}: {ctx['context_value'][:200]}...\n"
+        base_prompt += context_info
+    
+    return {"role": "system", "content": base_prompt}
+
+def groq_chat_stream(history_messages, *, model=None, max_tokens=1200, temperature=0.7):
+    """
+    Streaming SSE con requests.iter_lines() (sin SDK extra).
+    Devuelve un generador de "delta" (fragmentos de texto) como en OpenAI.
+    """
+    m = model or GROQ_TEXT_MODEL
+    payload = {
+        "model": m,
+        "messages": [_system_prompt()] + history_messages,
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+        "stream": True,
+    }
+    try:
+        with requests.post(API_URL, headers=STREAM_HEADERS, json=payload, stream=True, timeout=300) as r:
+            r.raise_for_status()
+            for raw in r.iter_lines(decode_unicode=True):
+                if not raw:
+                    continue
+                if raw.startswith("data: "):
+                    data = raw[6:]
+                    if data.strip() == "[DONE]":
+                        break
+                    try:
+                        obj = json.loads(data)
+                        delta = obj["choices"][0]["delta"].get("content")
+                        if delta:
+                            # FIX ENCODING por si llega interpretado raro
+                            yield safe_text(delta)
+                    except Exception:
+                        continue
+    except requests.HTTPError as http_err:
+        yield safe_text(f"⚠️ Error HTTP: {http_err}")
+    except Exception as e:
+        yield safe_text(f"⚠️ Error en streaming: {e}")
+
+def groq_chat_nonstream(history_messages, *, model=None, max_tokens=1200, temperature=0.7):
+    """
+    Llamada normal (no streaming) al endpoint OpenAI-compatible de Groq.
+    """
+    m = model or GROQ_TEXT_MODEL
+    payload = {
+        "model": m,
+        "messages": [_system_prompt()] + history_messages,
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+    }
+    try:
+        r = requests.post(API_URL, headers=BASE_HEADERS, json=payload, timeout=90)
+        if r.status_code != 200:
+            return safe_text(f"⚠️ Error {r.status_code}: {r.text}")
+        data = r.json()
+        return safe_text(data["choices"][0]["message"]["content"])
+    except Exception as e:
+        return safe_text(f"⚠️ Error en la conexión: {e}")
+
+# --- FUNCIONES UTILITARIAS UI ---
+def display_message(role, content):
+    """Muestra un mensaje en el chat con el estilo adecuado."""
+    if role == "assistant":
+        clean_content = safe_text(str(content)).replace("Zero:", "").strip()
+        st.markdown(
+            f"<div class='message'><div class='assistant-message'>{clean_content}</div></div>",
+            unsafe_allow_html=True,
+        )
+    else:
+        st.markdown(
+            f"<div class='message'><div class='user-message'>{safe_text(str(content))}</div></div>",
+            unsafe_allow_html=True,
+        )
+
+def save_current_chat():
+    """Guarda el chat actual en el historial y DB."""
+    if st.session_state.messages and st.session_state.get("usuario") and st.session_state.get("user_id"):
+        first_message = st.session_state.messages[0]["content"] if st.session_state.messages else "Nuevo chat"
+        title = first_message[:30] + "..." if len(first_message) > 30 else first_message
+        
+        # Actualizar en session_state
+        if st.session_state.usuario not in st.session_state.chat_history:
+            st.session_state.chat_history[st.session_state.usuario] = {}
+        st.session_state.chat_history[st.session_state.usuario][st.session_state.current_chat] = {
+            "title": safe_text(title),
+            "messages": st.session_state.messages.copy(),
+        }
+
+        # Asegurar que el chat exista en DB
+        try:
+            # Intentar actualizar título; si el chat no existe, crearlo
+            db.update_chat_title(st.session_state.current_chat, safe_text(title))
+        except Exception:
+            pass
+        user_chats = db.get_user_chats(st.session_state.user_id)
+        if not any(c["id"] == st.session_state.current_chat for c in user_chats):
+            st.session_state.current_chat = db.create_chat(st.session_state.user_id, safe_text(title))
+        else:
+            db.update_chat_title(st.session_state.current_chat, safe_text(title))
+        
+        # Guardar mensajes (nota: simple, puede duplicar si llamas muchas veces)
+        for message in st.session_state.messages:
+            db.add_message(
+                st.session_state.current_chat,
+                message["role"],
+                message["content"]
+            )
+
+def load_chat(chat_id):
+    """Carga un chat del historial."""
+    if "usuario" in st.session_state and chat_id in st.session_state.chat_history.get(st.session_state.usuario, {}):
+        st.session_state.current_chat = chat_id
+        st.session_state.messages = st.session_state.chat_history[st.session_state.usuario][chat_id]["messages"].copy()
+        st.rerun()
 
 # --- SIDEBAR ZERO MEJORADO ---
 def create_sidebar():
@@ -947,210 +969,238 @@ def chat_page():
         save_current_chat()
         st.rerun()
 
-# --- PÁGINA DE GESTIÓN DE ARCHIVOS ---
-def files_page():
-    """Página de gestión de archivos"""
+# --- PÁGINAS EXISTENTES MEJORADAS ---
+def image_page():
+    """Página de análisis de imágenes mejorada"""
+    st.title("🖼️ Análisis de Imágenes")
+    st.write("Sube una imagen para que Zero la analice usando Groq Vision.")
     
-    st.markdown("""
-        <div class="main-header">
-            <div style="display: flex; align-items: center; gap: 1rem;">
-                <div style="font-size: 2rem;">📁</div>
-                <div>
-                    <h1 style="margin: 0; color: var(--text-primary); font-weight: 800;">
-                        Gestor de Archivos
-                    </h1>
-                    <p style="margin: 0; color: var(--text-secondary); font-size: 0.9rem;">
-                        Gestiona y analiza tus documentos e imágenes
-                    </p>
-                </div>
-            </div>
-        </div>
-    """, unsafe_allow_html=True)
-    
-    st.markdown('<div class="files-container">', unsafe_allow_html=True)
-    
-    # Sección de subida
-    st.markdown("""
-        <div class="upload-section">
-            <div style="font-size: 4rem; margin-bottom: 1rem;">📤</div>
-            <h3 style="margin: 0 0 1rem 0; color: var(--text-primary); font-weight: 700;">Subir Archivos</h3>
-            <p style="margin: 0 0 2rem 0; color: var(--text-secondary); font-size: 1rem;">
-                Arrastra o selecciona archivos para que Zero los analice automáticamente
-            </p>
-    """, unsafe_allow_html=True)
-    
-    uploaded_files = st.file_uploader(
-        "Seleccionar archivos",
-        type=["pdf", "docx", "txt", "jpg", "jpeg", "png", "md", "xlsx", "csv"],
-        accept_multiple_files=True,
-        label_visibility="collapsed"
+    uploaded_file = st.file_uploader(
+        "Elige una imagen",
+        type=["jpg", "jpeg", "png", "gif", "bmp", "webp"]
     )
     
-    if uploaded_files:
-        if st.button("Procesar Archivos", type="primary", use_container_width=True):
-            progress_bar = st.progress(0)
-            for i, uploaded_file in enumerate(uploaded_files):
-                progress = (i + 1) / len(uploaded_files)
-                progress_bar.progress(progress)
+    if uploaded_file is not None:
+        # Mostrar imagen
+        image = Image.open(uploaded_file)
+        st.image(image, caption=uploaded_file.name, use_column_width=True)
+        
+        if st.button("🔍 Analizar Imagen", type="primary"):
+            with st.spinner("Analizando imagen..."):
+                # Convertir a base64
+                image_base64 = b64encode(uploaded_file.getvalue()).decode('utf-8')
                 
-                with st.spinner(f"Analizando {uploaded_file.name}..."):
-                    file_id, error = save_uploaded_file(uploaded_file)
-                    if file_id:
-                        st.success(f"✅ **{uploaded_file.name}** - Procesado correctamente")
-                        st.session_state.user_files = db.get_user_files(st.session_state.user_id)
-                    else:
-                        st.error(f"❌ **{uploaded_file.name}** - {error}")
-            
-            progress_bar.empty()
-            st.rerun()
+                # Analizar con Groq Vision
+                analysis = analyze_image_with_groq(image_base64, uploaded_file.name)
+                
+                # Mostrar resultado
+                st.subheader("📋 Análisis de la Imagen")
+                st.write(analysis)
+                
+                # Guardar análisis si el usuario está autenticado
+                if st.session_state.get("user_id"):
+                    try:
+                        image_disk_path = f"uploads/{st.session_state.user_id}/{uploaded_file.name}"
+                        db.save_image_analysis(
+                            user_id=st.session_state.user_id,
+                            image_path=image_disk_path,
+                            analysis_result=analysis,
+                            model_used=GROQ_VISION_MODEL
+                        )
+                        st.success("✅ Análisis guardado en tu historial")
+                    except Exception as e:
+                        st.warning(f"⚠️ No se pudo guardar el análisis: {str(e)}")
+
+def audio_page():
+    """Página de transcripción de audio (función existente)"""
+    st.title("🎤 Transcripción de Audio")
+    st.write("Habla y Zero convertirá tu voz a texto.")
     
-    st.markdown('</div>', unsafe_allow_html=True)
+    # Configuración de WebRTC
+    webrtc_ctx = webrtc_streamer(
+        key="speech-to-text",
+        mode=WebRtcMode.SENDONLY,
+        audio_receiver_size=1024,
+        media_stream_constraints={"video": False, "audio": True},
+    )
+    
+    if webrtc_ctx.audio_receiver:
+        st.write("🎙️ Grabando... Habla ahora")
+        
+        # Procesar audio (implementación simplificada)
+        audio_frames = []
+        while True:
+            try:
+                audio_frame = webrtc_ctx.audio_receiver.get_frame(timeout=1)
+                audio_frames.append(audio_frame)
+            except queue.Empty:
+                break
+        
+        if audio_frames:
+            st.write("🔄 Procesando audio...")
+            # Aquí iría la lógica de transcripción
+            st.write("📝 **Transcripción:** [Funcionalidad en desarrollo]")
+
+def register_page():
+    """Página de registro de usuarios (solo admin)"""
+    st.title("👥 Registro de Usuarios")
+    
+    if st.session_state.get("rol") != "admin":
+        st.error("❌ Acceso denegado. Solo administradores pueden registrar usuarios.")
+        return
+    
+    with st.form("registro_form"):
+        st.subheader("Crear Nuevo Usuario")
+        
+        username = st.text_input("Nombre de usuario")
+        password = st.text_input("Contraseña", type="password")
+        confirm_password = st.text_input("Confirmar contraseña", type="password")
+        rol = st.selectbox("Rol", ["usuario", "admin"])
+        nfc_uid = st.text_input("NFC UID (opcional)")
+        
+        submitted = st.form_submit_button("Registrar Usuario")
+        
+        if submitted:
+            if not username or not password:
+                st.error("❌ Todos los campos son obligatorios")
+            elif password != confirm_password:
+                st.error("❌ Las contraseñas no coinciden")
+            elif len(password) < 6:
+                st.error("❌ La contraseña debe tener al menos 6 caracteres")
+            else:
+                try:
+                    success = registrar_usuario(username, password, rol, nfc_uid or None)
+                    if success:
+                        st.success(f"✅ Usuario '{username}' registrado exitosamente")
+                    else:
+                        st.error("❌ Error al registrar usuario. Puede que ya exista.")
+                except Exception as e:
+                    st.error(f"❌ Error: {str(e)}")
+
+def file_upload_page():
+    """Página para subir y gestionar archivos"""
+    st.title("📁 Gestión de Archivos")
+    st.write("Sube documentos e imágenes para que Zero pueda usarlos en las conversaciones.")
+    
+    # Verificar que el usuario esté autenticado
+    if not st.session_state.get("usuario"):
+        st.error("❌ Error de sesión. Por favor, vuelve a iniciar sesión.")
+        return
+    
+    # Obtener user_id desde la base de datos usando el username
+    username = st.session_state.usuario
+    user_id = db.get_user_id_by_username(username)
+    
+    if not user_id:
+        st.error("❌ No se pudo obtener la información del usuario.")
+        return
+    
+    # Sección de subida de archivos
+    st.subheader("📤 Subir Nuevo Archivo")
+    
+    uploaded_file = st.file_uploader(
+        "Elige un archivo",
+        type=["pdf", "docx", "doc", "txt", "xlsx", "xls", "csv", "jpg", "jpeg", "png", "gif", "bmp", "webp"],
+        help="Formatos soportados: PDF, Word, Excel, TXT, CSV e imágenes"
+    )
+    
+    if uploaded_file is not None:
+        # Mostrar información del archivo (sin HTML peligroso)
+        st.info(f"📄 {uploaded_file.name} ({uploaded_file.size / 1024:.1f} KB)")
+        
+        if st.button("🚀 Procesar Archivo", type="primary"):
+            with st.spinner("Procesando archivo..."):
+                # Guardar y procesar archivo
+                file_id, error = save_uploaded_file(uploaded_file, user_id)
+                
+                if error:
+                    st.error(f"❌ Error al procesar archivo: {error}")
+                else:
+                    st.success("✅ Archivo procesado y guardado exitosamente")
+                    
+                    # Si es una imagen, realizar análisis con Groq Vision
+                    if uploaded_file.type.startswith('image/'):
+                        with st.spinner("Analizando imagen con Groq Vision..."):
+                            image_base64 = b64encode(uploaded_file.getvalue()).decode('utf-8')
+                            analysis = analyze_image_with_groq(image_base64, uploaded_file.name)
+                            
+                            # Guardar análisis
+                            db.save_image_analysis(
+                                user_id=user_id,
+                                image_path=f"uploads/{user_id}/{uploaded_file.name}",
+                                analysis_result=analysis,
+                                model_used=GROQ_VISION_MODEL,
+                                archivo_id=file_id
+                            )
+                            
+                            # Agregar análisis al contexto
+                            context_key = f"Análisis de imagen: {uploaded_file.name}"
+                            db.save_user_context(user_id, context_key, analysis, file_id)
+                            
+                            st.success("🖼️ Imagen analizada con Groq Vision")
+                    
+                    # Actualizar archivos y contexto en sesión
+                    st.session_state.user_files = db.get_user_files(user_id)
+                    st.session_state.user_context = db.get_user_context(user_id)
+                    
+                    st.rerun()
     
     # Sección de archivos existentes
-    st.markdown("### Tus Archivos")
+    st.subheader("📋 Archivos Subidos")
     
-    if not st.session_state.get("user_files"):
-        st.session_state.user_files = db.get_user_files(st.session_state.user_id)
+    # Cargar archivos del usuario si no están en sesión
+    if "user_files" not in st.session_state:
+        st.session_state.user_files = db.get_user_files(user_id)
     
-    if st.session_state.user_files:
+    if st.session_state.get("user_files"):
         for file_data in st.session_state.user_files:
-            file_icon = "🖼️" if file_data['file_type'] == 'image' else "📄"
-            file_size = f"{file_data['file_size'] / 1024:.1f} KB"
-            
-            col1, col2 = st.columns([4, 1])
-            
-            with col1:
-                st.markdown(f"""
-                    <div class="file-card">
-                        <div class="file-header">
-                            <div class="file-details">
-                                <div class="file-name">{file_icon} {file_data['filename']}</div>
-                                <div class="file-meta">
-                                    {file_data['file_type'].upper()} • {file_size} • {file_data['uploaded_at']}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                """, unsafe_allow_html=True)
-            
-            with col2:
-                col_use, col_del = st.columns(2)
-                with col_use:
-                    if st.button("💬", key=f"use_{file_data['id']}", help="Usar en chat", use_container_width=True):
-                        if file_data.get('content_extracted'):
-                            content_msg = f"Archivo: {file_data['filename']}\n\n{file_data['content_extracted'][:400]}..."
-                            st.session_state.messages.append({"role": "user", "content": content_msg})
-                            st.success("Archivo agregado al chat")
-                            st.rerun()
+            with st.expander(f"📄 {file_data['filename']}"):
+                col1, col2 = st.columns([3, 1])
                 
-                with col_del:
-                    if st.button("🗑️", key=f"del_{file_data['id']}", help="Eliminar", use_container_width=True):
+                with col1:
+                    st.write(f"**Tipo:** {file_data['file_type'].upper()}")
+                    st.write(f"**Tamaño:** {file_data['file_size'] / 1024:.1f} KB")
+                    st.write(f"**Subido:** {file_data['uploaded_at']}")
+                    
+                    if file_data.get('analysis_summary'):
+                        st.write(f"**Resumen:** {file_data['analysis_summary'][:200]}...")
+                
+                with col2:
+                    if st.button(f"🗑️ Eliminar", key=f"delete_{file_data['id']}"):
+                        # Eliminar archivo físico
                         try:
                             if os.path.exists(file_data['file_path']):
                                 os.remove(file_data['file_path'])
-                        except:
+                        except Exception:
                             pass
-                        db.delete_file(file_data['id'])
-                        st.session_state.user_files = db.get_user_files(st.session_state.user_id)
-                        st.success("Archivo eliminado")
+                        
+                        # Eliminar de base de datos
+                        db.delete_file(file_data['id'], user_id)
+                        
+                        # Actualizar sesión
+                        st.session_state.user_files = db.get_user_files(user_id)
+                        st.session_state.user_context = db.get_user_context(user_id)
+                        
+                        st.success("🗑️ Archivo eliminado")
                         st.rerun()
+                    
+                    if st.button(f"💬 Usar en Chat", key=f"use_{file_data['id']}"):
+                        if file_data.get('content_extracted'):
+                            # Agregar contenido al chat actual
+                            content_message = f"📄 **Contenido de {file_data['filename']}:**\n\n{file_data['content_extracted'][:1000]}..."
+                            st.session_state.messages.append({
+                                "role": "user", 
+                                "content": content_message
+                            })
+                            
+                            # Cambiar a página de chat
+                            st.session_state.menu_option = "Chat Principal"
+                            st.success(f"📄 Contenido de {file_data['filename']} agregado al chat")
+                            st.rerun()
     else:
-        st.info("""
-            <div style="text-align: center; padding: 3rem; color: var(--text-muted);">
-                <div style="font-size: 4rem; margin-bottom: 1rem;">📁</div>
-                <h3 style="color: var(--text-primary); margin-bottom: 1rem;">Aún no hay archivos</h3>
-                <p>Comienza subiendo tu primer archivo para que Zero lo analice</p>
-            </div>
-        """, unsafe_allow_html=True)
-    
-    st.markdown('</div>', unsafe_allow_html=True)
-
-# --- PÁGINA DE ADMINISTRACIÓN ---
-def admin_page():
-    """Página de administración de usuarios"""
-    
-    st.markdown("""
-        <div class="main-header">
-            <div style="display: flex; align-items: center; gap: 1rem;">
-                <div style="font-size: 2rem;">👨‍💼</div>
-                <div>
-                    <h1 style="margin: 0; color: var(--text-primary); font-weight: 800;">
-                        Panel de Administración
-                    </h1>
-                    <p style="margin: 0; color: var(--text-secondary); font-size: 0.9rem;">
-                        Gestión de usuarios del sistema
-                    </p>
-                </div>
-            </div>
-        </div>
-    """, unsafe_allow_html=True)
-    
-    st.markdown('<div class="files-container">', unsafe_allow_html=True)
-    
-    with st.form("user_registration_form"):
-        st.markdown("### Registrar Nuevo Usuario")
+        st.info("📭 No tienes archivos subidos aún. ¡Sube tu primer archivo!")
         
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            new_username = st.text_input("Nombre de usuario", placeholder="Ingresa el nombre de usuario")
-            new_password = st.text_input("Contraseña", type="password", placeholder="Crea una contraseña segura")
-        
-        with col2:
-            confirm_password = st.text_input("Confirmar contraseña", type="password", placeholder="Repite la contraseña")
-            user_role = st.selectbox("Rol del usuario", ["usuario", "admin"])
-        
-        submitted = st.form_submit_button("Registrar Usuario", use_container_width=True, type="primary")
-        
-        if submitted:
-            if not new_username or not new_password:
-                st.error("Todos los campos son obligatorios")
-            elif new_password != confirm_password:
-                st.error("Las contraseñas no coinciden")
-            elif len(new_password) < 6:
-                st.error("La contraseña debe tener al menos 6 caracteres")
-            else:
-                try:
-                    success = registrar_usuario(new_username, new_password, user_role)
-                    if success:
-                        st.success(f"✅ Usuario **{new_username}** registrado exitosamente como {user_role}")
-                    else:
-                        st.error("Error al registrar usuario. El nombre de usuario puede estar en uso.")
-                except Exception as e:
-                    st.error(f"Error: {str(e)}")
-    
-    st.markdown('</div>', unsafe_allow_html=True)
-
-# --- FUNCIONES AUXILIARES ---
-def save_current_chat():
-    """Guarda el chat actual en la base de datos"""
-    if st.session_state.get("user_id") and st.session_state.messages:
-        try:
-            title = "Nueva conversación"
-            for msg in st.session_state.messages:
-                if msg['role'] == 'user':
-                    user_content = msg['content']
-                    title = user_content[:25] + "..." if len(user_content) > 25 else user_content
-                    break
-            
-            chat_id = db.save_chat(
-                user_id=st.session_state.user_id,
-                chat_id=st.session_state.current_chat,
-                title=title
-            )
-            
-            for i, message in enumerate(st.session_state.messages):
-                db.save_message(
-                    chat_id=chat_id,
-                    role=message['role'],
-                    content=message['content'],
-                    message_order=i
-                )
-                
-        except Exception as e:
-            print(f"Error guardando chat: {e}")
-
-# --- APLICACIÓN PRINCIPAL ---
+# --- FUNCIÓN PRINCIPAL ---
 def main():
     """Aplicación principal"""
     

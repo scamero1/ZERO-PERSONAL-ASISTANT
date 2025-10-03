@@ -81,20 +81,10 @@ def aplicar_estilos_alien():
                 width: 100%;
                 max-width: 500px;
                 margin: 0 auto;
-                position: relative;
-                filter: drop-shadow(0 0 30px #00ff88);
-            }
-            
-            /* Tarjeta de cristal alien */
-            .alien-card {
-                background: rgba(0, 0, 0, 0.7);
-                backdrop-filter: blur(15px);
-                border: 1px solid #00ff88;
-                border-image: linear-gradient(45deg, #00ff88, #ff0080, #8000ff) 1;
-                padding: 3rem 2.5rem;
-                position: relative;
-                overflow: hidden;
-                animation: hologramFloat 6s ease-in-out infinite;
+                padding: 2rem;
+                border-radius: 16px;
+                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+                background: linear-gradient(145deg, #f8f9fa, #e9ecef);
             }
             
             @keyframes hologramFloat {
