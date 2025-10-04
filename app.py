@@ -123,6 +123,50 @@ def login():
     # GET: muestra el nuevo login
     return render_template('newlogin/index.html')
 
+# --- NUEVO: Registro de usuarios desde newlogin ---
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if request.method == 'GET':
+        # Reutiliza la misma página (conmutada por JS) para mostrar el registro
+        return render_template('newlogin/index.html')
+
+    # POST: crear usuario
+    usuario = (request.form.get('usuario') or '').strip()
+    clave = (request.form.get('clave') or '').strip()
+    confirmar = (request.form.get('confirmar') or '').strip()
+    rol = (request.form.get('rol') or 'usuario').strip()
+
+    if not usuario or not clave or not confirmar:
+        flash('Completa todos los campos', 'error')
+        return render_template('newlogin/index.html')
+
+    if clave != confirmar:
+        flash('Las contraseñas no coinciden', 'error')
+        return render_template('newlogin/index.html')
+
+    # Guardar en usuarios.json
+    try:
+        success, msg = registrar_usuario(usuario, clave, rol)
+        if not success:
+            flash(msg or 'No se pudo registrar el usuario', 'error')
+            return render_template('newlogin/index.html')
+    except Exception as e:
+        flash(f'Error registrando usuario: {str(e)}', 'error')
+        return render_template('newlogin/index.html')
+
+    # Asegurar entrada en la BD (password con hash)
+    try:
+        pwd_hash = hashlib.sha256(clave.encode('utf-8')).hexdigest()
+        user_info = db.get_user_by_username(usuario)
+        if not user_info:
+            db.create_user(usuario, pwd_hash, rol=rol)
+    except Exception:
+        # Si la BD falla, el registro en JSON igual se mantiene.
+        pass
+
+    flash('Usuario registrado exitosamente. Ahora puedes iniciar sesión.', 'success')
+    return redirect(url_for('login'))
+
 @app.route('/api/nfc-scan', methods=['POST'])
 def nfc_scan():
     if 'usuario' in session:

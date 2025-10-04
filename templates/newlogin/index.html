@@ -59,31 +59,33 @@
       </form>
 
       <!-- Register -->
-      <form id="register-form" class="form">
+      <form id="register-form" class="form" method="post" action="{{ url_for('register') }}">
         <h2>Register</h2>
         <p>Please enter your Name, Login and your Password</p>
 
         <div class="input-box">
           <i class="fa-solid fa-user"></i>
-          <input type="text" placeholder="Username">
+          <input type="text" name="usuario" placeholder="Username" required>
         </div>
 
         <div class="input-box">
           <i class="fa-solid fa-envelope"></i>
-          <input type="email" placeholder="Email">
+          <input type="email" name="email" placeholder="Email">
         </div>
 
         <div class="input-box">
           <i class="fa-solid fa-lock"></i>
-          <input type="password" placeholder="Password">
+          <input type="password" name="clave" placeholder="Password" required>
         </div>
 
         <div class="input-box">
           <i class="fa-solid fa-lock"></i>
-          <input type="password" placeholder="Re-enter Password">
+          <input type="password" name="confirmar" placeholder="Re-enter Password" required>
         </div>
 
-        <button type="button" class="btn">Register</button>
+        <input type="hidden" name="rol" value="usuario">
+
+        <button type="submit" class="btn">Register</button>
 
         <div class="switch">
           Already have an Account? <a href="#" id="show-login">Login!</a>

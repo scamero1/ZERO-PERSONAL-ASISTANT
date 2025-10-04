@@ -42,5 +42,10 @@
         "rol": "usuario",
         "nfc_uid": null,
         "fecha_registro": "2025-10-04 16:50:57"
+    },
+    "jorge": {
+        "clave": "jorge",
+        "rol": "usuario",
+        "nfc_uid": null
     }
 }
