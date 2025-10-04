@@ -20,7 +20,6 @@ import json
 from database import ZeroDatabase
 from file_processor import FileProcessor
 
-
 db = ZeroDatabase()
 
 
@@ -640,45 +639,80 @@ def create_sidebar():
     return selected_option
 
  --- FUNCIONES DE UTILIDAD PARA ARCHIVOS ---
-def save_uploaded_file(uploaded_file, user_id):
-    """Guarda un archivo subido y lo procesa"""
+MAX_FILE_SIZE_MB = 20  # límite de 20 MB por archivo
+ALLOWED_EXTENSIONS = {
+    ".txt", ".pdf", ".docx", ".xlsx", ".pptx",
+    ".jpg", ".jpeg", ".png"
+}
+
+def save_uploaded_file(uploaded_file, user_id: int):
+    """Guarda y procesa un archivo subido de manera segura."""
     try:
-         Crear directorio del usuario si no existe
-        user_dir = f"uploads/{user_id}"
+        if not uploaded_file:
+            return None, "No se recibió ningún archivo."
+
+        # ─── Validar extensión ───────────────────────────────
+        _, ext = os.path.splitext(uploaded_file.name.lower())
+        if ext not in ALLOWED_EXTENSIONS:
+            return None, f"Tipo de archivo no permitido ({ext})."
+
+        # ─── Validar tamaño ─────────────────────────────────
+        uploaded_file.seek(0, os.SEEK_END)
+        file_size_mb = uploaded_file.tell() / (1024 * 1024)
+        uploaded_file.seek(0)
+        if file_size_mb > MAX_FILE_SIZE_MB:
+            return None, f"El archivo supera el límite de {MAX_FILE_SIZE_MB} MB."
+
+        # ─── Crear carpeta de usuario ───────────────────────
+        user_dir = os.path.join("uploads", str(user_id))
         os.makedirs(user_dir, exist_ok=True)
-        
-         Guardar archivo físico
-        file_path = os.path.join(user_dir, uploaded_file.name)
+
+        # ─── Asegurar nombre de archivo seguro ──────────────
+        safe_name = secure_filename(uploaded_file.name)
+        file_path = os.path.join(user_dir, safe_name)
+
+        # ─── Guardar archivo físico ─────────────────────────
         with open(file_path, "wb") as f:
             f.write(uploaded_file.getbuffer())
-        
-         Procesar archivo
+
+        st.success(f"✅ Archivo guardado correctamente: {safe_name}")
+
+        # ─── Procesar contenido ─────────────────────────────
+        file_bytes = uploaded_file.getvalue()
         processor = FileProcessor()
-        content, summary, error = processor.process_file(file_path)
-        
-        if error:
-            return None, error
-        
-         Guardar en base de datos
-        file_id = db.save_file(
-            user_id=user_id,
-            filename=uploaded_file.name,
-            file_path=file_path,
-            file_type=FileProcessor.get_file_type(uploaded_file.name),
-            file_size=uploaded_file.size,
-            content_extracted=content,
-            analysis_summary=summary
-        )
-        
-         Agregar al contexto del usuario
+        result = processor.process_file(file_bytes, safe_name)
+
+        if result.get("error"):
+            return None, f"Error al procesar el archivo: {result['error']}"
+
+        content = result.get("content", "")
+        file_type = result.get("file_type", "desconocido")
+
+        # ─── Generar resumen ────────────────────────────────
+        summary = processor.generate_summary(content, file_type)
+
+        # ─── Guardar en base de datos ───────────────────────
+        db = ZeroDatabase()
+        file_id = db.save_file(user_id, safe_name, file_path, file_type, summary)
+
+        # ─── Guardar contexto asociado ──────────────────────
         if content:
-            context_key = f"Archivo: {uploaded_file.name}"
-            db.save_user_context(user_id, context_key, content, file_id)
-        
+            db.save_user_context(user_id, content)
+
+        # ─── Registrar en sesión ────────────────────────────
+        if "user_files" not in st.session_state:
+            st.session_state["user_files"] = []
+        st.session_state["user_files"].append({
+            "id": file_id,
+            "name": safe_name,
+            "summary": summary,
+            "path": file_path
+        })
+
         return file_id, None
-        
+
     except Exception as e:
-        return None, str(e)
+        return None, f"Ocurrió un error al guardar el archivo: {str(e)}"
 
 def analyze_image_with_groq(image_base64, filename):
     """Analiza una imagen usando Groq Vision"""
