@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ZERO AI</title>
+  <link rel="stylesheet" href="styles.css" />
+  <link
+    rel="stylesheet"
+    href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"
+  />
+</head>
+<body>
+  <!-- Fondo con figuras -->
+  <div class="background">
+    <div class="shape shape-left"></div>
+    <div class="shape shape-right"></div>
+  </div>
+
+  <div class="container">
+    <!-- Caja de formularios -->
+    <div class="form-box" id="form-box">
+      <!-- Login -->
+      <form id="login-form" class="form active">
+        <h2>ZERO AI</h2>
+        <p>Please enter your Username or Email and your Password</p>
+
+        <div class="input-box">
+          <i class="fa-solid fa-user"></i>
+          <input type="text" placeholder="Username or Email">
+        </div>
+
+        <div class="input-box">
+          <i class="fa-solid fa-lock"></i>
+          <input type="password" placeholder="Password">
+        </div>
+
+        <div class="options">
+          <a href="#">Forgot password?</a>
+        </div>
+
+        <button type="button" class="btn">Login</button>
+        <button type="button" class="google-btn"><i class="fa-brands fa-google"></i> Or, sign-in with Google</button>
+
+        <div class="switch">
+          Not a member yet? <a href="#" id="show-register">Register!</a>
+        </div>
+      </form>
+
+      <!-- Register -->
+      <form id="register-form" class="form">
+        <h2>Register</h2>
+        <p>Please enter your Name, Login and your Password</p>
+
+        <div class="input-box">
+          <i class="fa-solid fa-user"></i>
+          <input type="text" placeholder="Username">
+        </div>
+
+        <div class="input-box">
+          <i class="fa-solid fa-envelope"></i>
+          <input type="email" placeholder="Email">
+        </div>
+
+        <div class="input-box">
+          <i class="fa-solid fa-lock"></i>
+          <input type="password" placeholder="Password">
+        </div>
+
+        <div class="input-box">
+          <i class="fa-solid fa-lock"></i>
+          <input type="password" placeholder="Re-enter Password">
+        </div>
+
+        <button type="button" class="btn">Register</button>
+
+        <div class="switch">
+          Already have an Account? <a href="#" id="show-login">Login!</a>
+        </div>
+      </form>
+    </div>
+
+    <!-- Espacio reservado para el logo -->
+    <div class="logo-space">
+      <!-- Aquí podrás poner tu logo -->
+      <!-- Ejemplo:
+      <img src="logo.png" alt="Logo ZERO">
+      -->
+    </div>
+  </div>
+
+  <script>
+    const loginForm = document.getElementById("login-form");
+    const registerForm = document.getElementById("register-form");
+    const showRegister = document.getElementById("show-register");
+    const showLogin = document.getElementById("show-login");
+
+    showRegister.addEventListener("click", () => {
+      loginForm.classList.remove("active");
+      registerForm.classList.add("active");
+    });
+
+    showLogin.addEventListener("click", () => {
+      registerForm.classList.remove("active");
+      loginForm.classList.add("active");
+    });
+  </script>
+</body>
+</html>

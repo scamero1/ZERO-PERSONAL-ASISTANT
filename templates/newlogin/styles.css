@@ -1,0 +1,236 @@
+/* === Fondo === */
+body {
+  margin: 0;
+  font-family: "Poppins", sans-serif;
+  height: 100vh;
+  overflow: hidden;
+  background-color: #0f0b14;
+}
+
+.background {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+}
+
+/* Figuras decorativas */
+.shape {
+  position: absolute;
+  border-radius: 50%;
+  background: radial-gradient(circle at center, #5b2c83, #2b0b3a);
+  filter: blur(60px);
+  opacity: 0.8;
+}
+
+.shape-left {
+  width: 480px;
+  height: 480px;
+  top: -200px;
+  left: -250px;
+}
+
+.shape-right {
+  width: 550px;
+  height: 550px;
+  bottom: -250px;
+  right: -350px;
+}
+
+/* === Contenedor principal === */
+.container {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  gap: 6rem;
+  color: #fff;
+}
+
+/* === Espacio del logo === */
+.logo-space {
+  width: 280px;
+  height: 280px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.03);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 20px rgba(255, 255, 255, 0.05);
+  position: relative;
+}
+
+.logo-space::before {
+  content: "Logo aquí";
+  color: rgba(255, 255, 255, 0.3);
+  font-size: 1rem;
+  position: absolute;
+}
+
+/* Cuando agregues el logo */
+.logo-space img {
+  max-width: 200px;
+  border-radius: 50%;
+}
+
+/* === Caja de formularios === */
+.form-box {
+  width: 380px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  padding: 2rem 3rem;
+  box-shadow: 0 0 30px rgba(0, 0, 0, 0.4);
+  position: relative;
+  overflow: hidden;
+  backdrop-filter: blur(10px);
+}
+
+.form {
+  display: none;
+  flex-direction: column;
+  transition: opacity 0.4s ease;
+}
+
+.form.active {
+  display: flex;
+  opacity: 1;
+}
+
+.form h2 {
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
+  text-align: center;
+}
+
+.form p {
+  font-size: 0.9rem;
+  color: #ccc;
+  text-align: center;
+  margin-bottom: 1rem;
+}
+
+/* === Campos con íconos === */
+.input-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 10px;
+  margin: 1rem 0;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 0.6rem 0.8rem 0.6rem 2.4rem; /* espacio para el ícono */
+}
+
+.input-box i {
+  position: absolute;
+  left: 12px;
+  color: #b48ad7;
+  font-size: 1rem;
+}
+
+.input-box input {
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #fff;
+  flex: 1;
+  font-size: 0.9rem;
+}
+
+.input-box input::placeholder {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+/* === Opciones === */
+.options {
+  text-align: right;
+  font-size: 0.8rem;
+}
+
+.options a {
+  color: #b48ad7;
+  text-decoration: none;
+}
+
+.options a:hover {
+  text-decoration: underline;
+}
+
+/* === Botones === */
+.btn {
+  width: 100%;
+  background: transparent;
+  border: 1px solid #5b2c83;
+  color: #b48ad7;
+  font-weight: bold;
+  border-radius: 10px;
+  padding: 0.6rem;
+  margin-top: 1rem;
+  cursor: pointer;
+  transition: 0.3s;
+}
+
+.btn:hover {
+  background: #5b2c83;
+  color: #fff;
+}
+
+.google-btn {
+  width: 100%;
+  background: #222;
+  border: none;
+  color: #fff;
+  border-radius: 10px;
+  padding: 0.6rem;
+  margin-top: 1rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+}
+
+.google-btn i {
+  color: #ea4335;
+}
+
+.google-btn:hover {
+  background: #333;
+}
+
+/* === Enlace entre formularios === */
+.switch {
+  margin-top: 1rem;
+  font-size: 0.85rem;
+  text-align: center;
+  color: #ccc;
+}
+
+.switch a {
+  color: #b48ad7;
+  text-decoration: none;
+}
+
+.switch a:hover {
+  text-decoration: underline;
+}
+
+/* === Responsive === */
+@media (max-width: 900px) {
+  .container {
+    flex-direction: column;
+    gap: 2rem;
+  }
+
+  .logo-space {
+    width: 180px;
+    height: 180px;
+  }
+
+  .form-box {
+    width: 90%;
+    padding: 2rem;
+  }
+}
