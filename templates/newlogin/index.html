@@ -2,15 +2,26 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ZERO AI</title>
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="{{ url_for('newlogin_css') }}" />
   <link
     rel="stylesheet"
     href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"
   />
+  <link rel="icon" type="image/jpeg" href="{{ url_for('favicon') }}">
 </head>
 <body>
+  <!-- Mensajes de error/información -->
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="flash-container">
+        {% for category, message in messages %}
+          <div class="flash flash-{{ category }}">{{ message }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
   <!-- Fondo con figuras -->
   <div class="background">
     <div class="shape shape-left"></div>
@@ -21,25 +32,25 @@
     <!-- Caja de formularios -->
     <div class="form-box" id="form-box">
       <!-- Login -->
-      <form id="login-form" class="form active">
+      <form id="login-form" class="form active" action="{{ url_for('login') }}" method="POST">
         <h2>ZERO AI</h2>
         <p>Please enter your Username or Email and your Password</p>
 
         <div class="input-box">
           <i class="fa-solid fa-user"></i>
-          <input type="text" placeholder="Username or Email">
+          <input type="text" name="usuario" placeholder="Username or Email" required>
         </div>
 
         <div class="input-box">
           <i class="fa-solid fa-lock"></i>
-          <input type="password" placeholder="Password">
+          <input type="password" name="clave" placeholder="Password" required>
         </div>
 
         <div class="options">
           <a href="#">Forgot password?</a>
         </div>
 
-        <button type="button" class="btn">Login</button>
+        <button type="submit" class="btn">Login</button>
         <button type="button" class="google-btn"><i class="fa-brands fa-google"></i> Or, sign-in with Google</button>
 
         <div class="switch">
@@ -82,10 +93,7 @@
 
     <!-- Espacio reservado para el logo -->
     <div class="logo-space">
-      <!-- Aquí podrás poner tu logo -->
-      <!-- Ejemplo:
-      <img src="logo.png" alt="Logo ZERO">
-      -->
+      <img src="logozero.jpg" alt="Logo ZERO">
     </div>
   </div>
 

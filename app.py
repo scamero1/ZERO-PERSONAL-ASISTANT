@@ -2,6 +2,7 @@ from flask import Flask, render_template, request, jsonify, session, redirect, u
 import os
 import json
 import uuid
+import hashlib
 from werkzeug.utils import secure_filename
 from base64 import b64encode
 import requests
@@ -17,7 +18,7 @@ from auth import verificar_login, logout, registrar_usuario
 load_dotenv()
 
 # Inicializar aplicación Flask
-app = Flask(__name__)
+app = Flask(__name__, template_folder='templates', static_folder='static')
 app.secret_key = os.getenv("SECRET_KEY", "zero_secret_key")
 app.config['UPLOAD_FOLDER'] = 'user_uploads'
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
@@ -48,49 +49,79 @@ STREAM_HEADERS = {
 def index():
     if 'usuario' not in session:
         return redirect(url_for('login'))
-    groq_enabled = bool(GROQ_API_KEY)
-    return render_template(
-        'index.html',
-        usuario=session.get('usuario'),
-        rol=session.get('rol'),
-        groq_enabled=groq_enabled
-    )
+    usuario = session.get('usuario')
+    return redirect(f"http://localhost:8501/?usuario={usuario}")
 
 @app.route('/favicon.ico')
 def favicon():
-    return send_from_directory(app.root_path, 'favicon.ico', mimetype='image/x-icon')
+    return send_from_directory(
+        os.path.join(app.root_path, 'templates', 'newlogin'),
+        'logozero.jpg',
+        mimetype='image/jpeg'
+    )
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        usuario = request.form.get('usuario')
-        clave = request.form.get('clave')
-        
-        # Manejo de acceso rápido
-        if clave == 'acceso_rapido':
-            # Verificar si el usuario existe en la base de datos
+        usuario = (request.form.get('usuario') or '').strip()
+        clave = (request.form.get('clave') or '').strip()
+
+        if not usuario or not clave:
+            flash('Completa usuario y contraseña', 'error')
+            return render_template('newlogin/index.html')
+
+        # Admin/admin directo
+        if usuario == 'admin' and clave == 'admin':
+            user_info = db.get_user_by_username('admin')
+            if not user_info:
+                pwd_hash = hashlib.sha256('admin'.encode('utf-8')).hexdigest()
+                db.create_user('admin', pwd_hash, rol='admin')
+                user_info = db.get_user_by_username('admin')
+            session['usuario'] = 'admin'
+            session['user_id'] = user_info.get('id') if user_info else None
+            session['rol'] = 'admin'
+            if session.get('user_id'):
+                db.update_last_login(session['user_id'])
+            return redirect(url_for('index'))
+
+        # Verificación normal
+        if verificar_login(usuario, clave):
+            # Leer rol desde usuarios.json
+            rol_json = 'usuario'
+            try:
+                with open(os.path.join(app.root_path, 'usuarios.json'), 'r', encoding='utf-8') as f:
+                    usuarios = json.load(f)
+                if isinstance(usuarios, dict):
+                    dato = usuarios.get(usuario)
+                    if isinstance(dato, dict):
+                        rol_json = dato.get('rol', 'usuario')
+                elif isinstance(usuarios, list):
+                    for u in usuarios:
+                        name = u.get('usuario') or u.get('username')
+                        if name == usuario:
+                            rol_json = u.get('rol', 'usuario')
+                            break
+            except Exception:
+                pass
+
             user_info = db.get_user_by_username(usuario)
-            if user_info:
-                session['usuario'] = usuario
-                session['user_id'] = user_info['id']
-                session['rol'] = user_info['rol']
-                return redirect(url_for('index'))
-        # Autenticación normal con contraseña
-        elif verificar_login(usuario, clave):
-            # Obtener información del usuario desde la base de datos
-            user_info = db.get_user_by_username(usuario)
-            if user_info:
-                session['usuario'] = usuario
-                session['user_id'] = user_info['id']
-                session['rol'] = user_info['rol']
-                return redirect(url_for('index'))
-        
+            if not user_info:
+                pwd_hash = hashlib.sha256(clave.encode('utf-8')).hexdigest()
+                db.create_user(usuario, pwd_hash, rol=rol_json)
+                user_info = db.get_user_by_username(usuario)
+
+            session['usuario'] = usuario
+            session['user_id'] = user_info.get('id') if user_info else None
+            session['rol'] = user_info.get('rol', rol_json) if user_info else rol_json
+            if session.get('user_id'):
+                db.update_last_login(session['user_id'])
+            return redirect(url_for('index'))
+
         flash('Credenciales inválidas', 'error')
-    
-    # Contar usuarios para mostrar en la página de login
-    user_count = db.get_user_count() if hasattr(db, 'get_user_count') else '?'
-    
-    return render_template('login.html', user_count=user_count, login_mode=None)
+        return render_template('newlogin/index.html')
+
+    # GET: muestra el nuevo login
+    return render_template('newlogin/index.html')
 
 @app.route('/api/nfc-scan', methods=['POST'])
 def nfc_scan():
@@ -112,9 +143,11 @@ def nfc_scan():
     return jsonify({'success': False, 'error': 'Usuario no encontrado'})
 
 @app.route('/logout')
-def logout_route():
-    logout()
+def flask_logout():
+    # ... existing code ...
+    session.clear()
     return redirect(url_for('login'))
+    # ... existing code ...
 
 # API para el chat
 @app.route('/api/chat', methods=['POST'])
@@ -359,7 +392,34 @@ Elementos notables o importantes"""
     except Exception as e:
         return f"Imagen procesada: {filename}"
 
+@app.route('/newlogin/styles.css')
+def newlogin_css():
+    css_dir = os.path.join(app.root_path, 'templates', 'newlogin')
+    return send_from_directory(css_dir, 'styles.css', mimetype='text/css')
+
 # Iniciar la aplicación
+def verificar_login(usuario, clave):
+    # Intenta validar con usuarios.json; si no existe, retorna False
+    try:
+        with open(os.path.join(app.root_path, 'usuarios.json'), 'r', encoding='utf-8') as f:
+            usuarios = json.load(f)
+        # Formato dict: {"admin": {"clave": "...", "rol": "admin"}, ...}
+        if isinstance(usuarios, dict):
+            entry = usuarios.get(usuario)
+            if isinstance(entry, dict):
+                return (entry.get('clave') or entry.get('password')) == clave
+            # Soporte de dict plano: {"admin": "clave"}
+            return entry == clave
+        # Formato lista: [{"usuario": "...", "clave": "...", "rol": "..."}]
+        if isinstance(usuarios, list):
+            for u in usuarios:
+                name = u.get('usuario') or u.get('username')
+                if name == usuario and (u.get('clave') or u.get('password')) == clave:
+                    return True
+    except Exception:
+        pass
+    return False
+
 if __name__ == '__main__':
     app.run(debug=True, port=8000)
 

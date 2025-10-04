@@ -25,9 +25,32 @@ db = ZeroDatabase()
 
 load_dotenv()
 
+def bootstrap_auth_from_query():
+    # Inicializa claves de sesión
+    if "autenticado" not in st.session_state:
+        st.session_state.autenticado = False
+    if "usuario" not in st.session_state:
+        st.session_state.usuario = None
+    if "rol" not in st.session_state:
+        st.session_state.rol = "usuario"
+
+    # Lee usuario desde la URL (ej. http://localhost:8501/?usuario=admin)
+    qp = st.query_params
+    usuario_qp = qp.get("usuario")
+    if isinstance(usuario_qp, list):
+        usuario_qp = usuario_qp[0]
+
+    if usuario_qp:
+        st.session_state.autenticado = True
+        st.session_state.usuario = usuario_qp
+        st.session_state.rol = "admin" if usuario_qp == "admin" else "usuario"
+
+# Llama al bootstrap al cargar
+bootstrap_auth_from_query()
+
 st.set_page_config(
     page_title="ZERO - AI Assistant",
-    page_icon="⚡",
+    page_icon="templates/newlogin/logozero.jpg",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -551,6 +574,7 @@ def create_sidebar():
     """Crea la barra lateral con diseño Zero mejorado"""
     with st.sidebar:
         # Header del sidebar
+        username = st.session_state.get('usuario') or 'Invitado'
         st.markdown(f"""
             <div class="sidebar-header">
                 <div class="sidebar-title">
@@ -558,7 +582,7 @@ def create_sidebar():
                     <div>ZERO</div>
                 </div>
                 <div class="user-info">
-                    Hola, {st.session_state.get('usuario', 'Usuario')}
+                    Hola, {username}
                 </div>
             </div>
         """, unsafe_allow_html=True)
@@ -581,17 +605,18 @@ def create_sidebar():
                     user_chats.sort(key=lambda x: x.get('created_at', ''), reverse=True)
                     
                     for chat in user_chats[:8]:
-                        is_active = chat['chat_id'] == st.session_state.current_chat
-                        preview = chat['title'][:25] + "..." if len(chat['title']) > 25 else chat['title']
+                        is_active = chat['id'] == st.session_state.current_chat
+                        title_val = chat.get('title') or "Nuevo chat"
+                        preview = title_val[:25] + "..." if len(title_val) > 25 else title_val
                         
                         if st.button(
                             preview,
-                            key=f"chat_{chat['chat_id']}",
+                            key=f"chat_{chat['id']}",
                             use_container_width=True,
                             type="primary" if is_active else "secondary"
                         ):
-                            st.session_state.current_chat = chat['chat_id']
-                            chat_messages = db.get_chat_messages(chat['chat_id'])
+                            st.session_state.current_chat = chat['id']
+                            chat_messages = db.get_chat_messages(chat['id'])
                             st.session_state.messages = [
                                 {"role": msg['role'], "content": msg['content']}
                                 for msg in chat_messages
@@ -633,99 +658,36 @@ def create_sidebar():
         st.markdown('<div class="sidebar-section">', unsafe_allow_html=True)
         st.markdown('<div class="section-title">Navegación</div>', unsafe_allow_html=True)
         
-        # Botones de navegación morados
         if st.button("Chat con Zero", key="nav_chat", use_container_width=True, type="primary"):
             st.session_state.current_page = "chat"
             st.rerun()
-        
+
         if st.button("Gestor de Archivos", key="nav_files", use_container_width=True, type="primary"):
             st.session_state.current_page = "files"
             st.rerun()
-            
+
         if st.session_state.rol == "admin":
             if st.button("Panel Admin", key="nav_admin", use_container_width=True, type="primary"):
                 st.session_state.current_page = "admin"
                 st.rerun()
-        
+
         st.markdown('</div>', unsafe_allow_html=True)
-        
+
         # Footer del sidebar
         st.markdown("---")
-        if st.button("Cerrar Sesión", use_container_width=True, type="secondary"):
-            logout()
-
-<<<<<<< HEAD
-            )
-    else:
-        st.markdown('<div style="color: var(--text-secondary); font-size: 0.9rem; text-align: center; padding: 1rem;">No hay archivos subidos</div>', unsafe_allow_html=True)
-    
-    st.markdown('</div>', unsafe_allow_html=True)
-
-     Sección de herramientas
-    st.markdown('<div class="sidebar-section">', unsafe_allow_html=True)
-    st.markdown('<div class="sidebar-section-title">🛠️ Herramientas</div>', unsafe_allow_html=True)
-
-    menu_options = ["Chat Principal", "Subir Archivos"]
-    if st.session_state.rol == "admin":
-        menu_options += ["Análisis de Imágenes", "Transcripción de Audio", "Registro de Usuarios"]
-
-    selected_option = st.radio("", menu_options, key="menu_option", label_visibility="collapsed")
-
-    st.markdown('</div>', unsafe_allow_html=True)
-
-    if st.button("🚪 Cerrar sesión", key="logout_btn", use_container_width=True, type="primary"):
-        logout()
-        st.rerun()
-    
-    return selected_option
-    
-    return selected_option
-
-# --- FUNCIONES DE UTILIDAD PARA ARCHIVOS ---
-def save_uploaded_file(uploaded_file, user_id):
-    """Guarda un archivo subido y lo procesa"""
-    try:
-        # Crear directorio del usuario si no existe
-        user_dir = f"uploads/{user_id}"
-        os.makedirs(user_dir, exist_ok=True)
-        
-        # Guardar archivo físico
-        file_path = os.path.join(user_dir, uploaded_file.name)
-        with open(file_path, "wb") as f:
-            f.write(uploaded_file.getbuffer())
-        
-        # Procesar archivo con FileProcessor (usa BYTES + nombre)
-        processor = FileProcessor()
-        file_bytes = uploaded_file.getvalue()
-        result = processor.process_file(file_bytes, uploaded_file.name)
-        content = result.get("content")
-        summary = processor.generate_summary(content or "", result.get("file_type", "desconocido"))
-        error = result.get("error")
-        
-        if error:
-            return None, error
-        
-        # Guardar en base de datos
-        file_id = db.save_file(
-            user_id=user_id,
-            filename=uploaded_file.name,
-            file_path=file_path,
-            file_type=result.get("file_type", "unknown"),
-            file_size=uploaded_file.size,
-            content_extracted=content,
-            analysis_summary=summary
+        # Cerrar sesión en la misma pestaña (target="_self")
+        st.markdown(
+            '''
+            <a href="http://localhost:8000/logout" target="_self"
+               style="display:block;text-align:center;padding:0.875rem 1.5rem;border-radius:12px;
+                      background:linear-gradient(135deg,#8b5cf6 0%,#a78bfa 100%);
+                      color:white;text-decoration:none;font-weight:600;">
+                Cerrar Sesión
+            </a>
+            ''',
+            unsafe_allow_html=True
         )
-        
-        # Agregar al contexto del usuario
-        if content:
-            context_key = f"Archivo: {uploaded_file.name}"
-            db.save_user_context(user_id, context_key, content, file_id)
-        
-        return file_id, None
-        
-    except Exception as e:
-        return None, str(e)
-=======
+
 # --- SISTEMA DE ARCHIVOS ---
 def analyze_document_with_groq(content, filename):
     """Analiza documentos con Groq"""
@@ -768,7 +730,6 @@ def analyze_document_with_groq(content, filename):
             
     except Exception as e:
         return f"Documento procesado: {filename}"
->>>>>>> 918a0b7ec70a7fdac1eccf92f61a80f998591047
 
 def analyze_image_with_groq(image_base64, filename):
     """Analiza imágenes con Groq Vision"""
@@ -1252,28 +1213,37 @@ def file_upload_page():
 # --- FUNCIÓN PRINCIPAL ---
 def main():
     """Aplicación principal"""
-    
-    # Inicializar datos del usuario
+    # Siempre tomar el usuario desde query params si está presente
+    qp = st.query_params
+    usuario_qp = qp.get("usuario")
+    if usuario_qp:
+        st.session_state.usuario = usuario_qp
+        user_info = db.get_user_by_username(usuario_qp)
+        if user_info:
+            st.session_state.rol = user_info.get("rol", "usuario")
+            st.session_state.user_id = user_info.get("id")
+
+    # Si tenemos user_id, precargar lista de archivos del usuario
     if st.session_state.get("user_id") and "user_files" not in st.session_state:
         try:
             st.session_state.user_files = db.get_user_files(st.session_state.user_id)
         except:
             st.session_state.user_files = []
-    
+
     # Navegación desde sidebar
     create_sidebar()
-    
+
     # Determinar página actual (simplificado)
     if "current_page" not in st.session_state:
         st.session_state.current_page = "chat"
-    
+
     # Renderizar página seleccionada
     if st.session_state.current_page == "chat":
         chat_page()
     elif st.session_state.current_page == "files":
-        files_page()
+        file_upload_page()
     elif st.session_state.current_page == "admin":
-        admin_page()
+        register_page()
 
 if __name__ == "__main__":
     main()

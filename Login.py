@@ -601,9 +601,13 @@ def verificar_login():
 def logout():
     usuario = st.session_state.get("usuario", "USER")
     st.session_state.clear()
-    st.error(f"🚫 SESSION TERMINATED: {usuario}")
-    time.sleep(1)
-    st.rerun()
+    st.info(f"🔒 Sesión cerrada: {usuario}")
+    # Redirección confiable desde Streamlit hacia Flask
+    st.components.v1.html(
+        '<script>window.top.location.href="http://localhost:8000/logout";</script>',
+        height=0
+    )
+    st.stop()
 
 # --- REGISTRO ALIEN ---
 def registrar_usuario(usuario, clave, rol, uid_nfc=None):

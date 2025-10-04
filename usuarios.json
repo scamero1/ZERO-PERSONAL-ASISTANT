@@ -36,5 +36,11 @@
         "rol": "usuario",
         "nfc_uid": "",
         "fecha_registro": "2025-09-26 10:41:48"
+    },
+    "andres": {
+        "clave": "andres",
+        "rol": "usuario",
+        "nfc_uid": null,
+        "fecha_registro": "2025-10-04 16:50:57"
     }
 }

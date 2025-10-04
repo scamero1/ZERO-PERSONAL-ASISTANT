@@ -21,10 +21,10 @@ load_dotenv()
 
 # --- CONFIGURACIÓN INICIAL ---
 st.set_page_config(
-    page_title="ZERO - Asistente Virtual",
-    page_icon="favicon.ico",
-    layout="centered",
-    initial_sidebar_state="auto"
+    page_title="ZERO - AI Assistant",
+    page_icon="templates/newlogin/logozero.jpg",
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
 # --- ESTADOS DE SESIÓN ---
