@@ -1,4 +1,3 @@
-
 import streamlit as st
 from streamlit_webrtc import webrtc_streamer, WebRtcMode
 import speech_recognition as sr
@@ -15,32 +14,30 @@ import uuid
 from dotenv import load_dotenv
 import requests
 import json
-
+import io
+import re
+from datetime import datetime
 
 from database import ZeroDatabase
 from file_processor import FileProcessor
 
 db = ZeroDatabase()
 
-
 load_dotenv()
 
-
 st.set_page_config(
-    page_title="ZERO - Asistente Virtual",
-    page_icon="favicon.ico",
-    layout="centered",
-    initial_sidebar_state="auto"
+    page_title="ZERO - AI Assistant",
+    page_icon="⚡",
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
-
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 if not GROQ_API_KEY:
-    st.error("Falta GROQ_API_KEY en tu entorno (.env).")
+    st.error("GROQ_API_KEY no encontrada en las variables de entorno")
 API_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 GROQ_TEXT_MODEL = os.getenv("GROQ_TEXT_MODEL", "llama-3.1-8b-instant")
-
 GROQ_VISION_MODEL = os.getenv("GROQ_VISION_MODEL", "llama-3.2-11b-vision-preview")
 
 BASE_HEADERS = {
@@ -53,10 +50,7 @@ STREAM_HEADERS = {
 }
 
 def safe_text(text: str) -> str:
-    """
-    Repara textos que se ven como 'diseÃ±ado' cuando fueron interpretados como latin-1.
-    Si no hay problema, regresa el texto original.
-    """
+    """Repara textos con problemas de encoding"""
     if text is None:
         return ""
     if not isinstance(text, str):
@@ -66,160 +60,166 @@ def safe_text(text: str) -> str:
     except Exception:
         return text
 
+# --- INICIALIZACIÓN DE ESTADO ---
+def initialize_session_state():
+    default_states = {
+        "autenticado": False,
+        "usuario": None,
+        "rol": None,
+        "user_id": None,
+        "messages": [],
+        "thinking": False,
+        "current_chat": str(uuid.uuid4()),
+        "user_files": [],
+        "user_context": [],
+        "sidebar_collapsed": False
+    }
+    
+    for key, value in default_states.items():
+        if key not in st.session_state:
+            st.session_state[key] = value
 
-if "chat_history" not in st.session_state:
-    st.session_state.chat_history = {}
-if "current_chat" not in st.session_state:
-    st.session_state.current_chat = str(uuid.uuid4())
+initialize_session_state()
 
-if st.session_state.get("autenticado", False) and st.session_state.get("usuario"):
-    usuario_actual = st.session_state.usuario
-    if usuario_actual not in st.session_state.chat_history:
-        st.session_state.chat_history[usuario_actual] = {}
-    if st.session_state.current_chat not in st.session_state.chat_history[usuario_actual]:
-        st.session_state.chat_history[usuario_actual][st.session_state.current_chat] = {
-            "title": "Nuevo chat",
-            "messages": []
+# --- DISEÑO ZERO MEJORADO ---
+def load_css():
+    st.markdown("""
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+        
+        :root {
+            --primary-bg: #0a0a0a;
+            --secondary-bg: #111111;
+            --sidebar-bg: #1a1a1a;
+            --card-bg: #222222;
+            --accent-primary: #8b5cf6;
+            --accent-secondary: #a78bfa;
+            --accent-gradient: linear-gradient(135deg, #8b5cf6 0%, #a78bfa 100%);
+            --text-primary: #ffffff;
+            --text-secondary: #e2e8f0;
+            --text-muted: #94a3b8;
+            --border-color: #2d3748;
+            --border-light: #374151;
+            --user-msg-bg: #1e293b;
+            --assistant-msg-bg: #1a1a1a;
+            --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.4);
+            --shadow-md: 0 8px 25px rgba(0, 0, 0, 0.5);
+            --shadow-lg: 0 15px 40px rgba(0, 0, 0, 0.6);
+            --success: #10b981;
+            --warning: #f59e0b;
+            --error: #ef4444;
         }
 
- --- ESTILOS CSS ---
-def load_css():
-    favicon_path = "favicon.ico"
-    favicon_base64 = ""
+        .stApp {
+            background: var(--primary-bg);
+            font-family: 'Plus Jakarta Sans', sans-serif;
+        }
 
-    if os.path.exists(favicon_path):
-        with open(favicon_path, "rb") as f:
-            favicon_base64 = b64encode(f.read()).decode()
+        /* Sidebar elegante */
+        .css-1d391kg, .css-1lcbmhc {
+            background: var(--sidebar-bg) !important;
+            border-right: 1px solid var(--border-color);
+        }
 
-    st.markdown(f"""
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-        
-        :root {{
-            --bg-primary: 000000;
-            --bg-card: 1a1a1a;
-            --bg-sidebar: 111111;
-            --text-primary: ffffff;
-            --text-secondary: cccccc;
-            --text-muted: 888888;
-            --purple: 8B5CF6;
-            --purple-hover: 7C3AED;
-            --purple-light: A78BFA;
-            --border: 333333;
-            --shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-            --assistant-bg: 2a2a2a;
-            --assistant-text: ffffff;
-            --user-bg: 8B5CF6;
-            --user-text: ffffff;
-            --sidebar-width: 300px;
-        }}
-
-        * {{
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }}
-        
-        .stApp {{
-            background-color: var(--bg-primary) !important;
-            font-family: 'Inter', sans-serif;
-            color: var(--text-primary);
-        }}
-
-        .stApp > header {{
-            display: none !important;
-        }}
-
-        .main {{
-            background-color: var(--bg-primary);
-            color: var(--text-primary);
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 1rem;
-        }}
-        
-        .main .block-container {{
-            background-color: var(--bg-primary);
-            padding: 1rem;
-        }}
-
-        .sidebar .sidebar-content {{
-            background-color: var(--bg-sidebar) !important;
-            color: var(--text-primary);
-            width: var(--sidebar-width);
-            border-right: 1px solid var(--border);
-            padding: 1rem;
-        }}
-        
-        .css-1d391kg {{
-            background-color: var(--bg-sidebar) !important;
-        }}
-
-        .sidebar-title {{
-            font-size: 1.5rem;
-            font-weight: 600;
-            color: var(--purple);
-            margin-bottom: 1rem;
-            padding-bottom: 0.5rem;
-            border-bottom: 2px solid var(--purple);
-        }}
-
-        .sidebar-section {{
+        .sidebar-header {
+            padding: 2rem 1.5rem 1.5rem 1.5rem;
+            border-bottom: 1px solid var(--border-color);
             margin-bottom: 1.5rem;
-        }}
+        }
 
-        .sidebar-section-title {{
-            font-weight: 600;
-            color: var(--purple);
+        .sidebar-title {
+            font-size: 1.5rem;
+            font-weight: 800;
+            color: var(--accent-primary);
             margin-bottom: 0.5rem;
             display: flex;
             align-items: center;
-            gap: 0.5rem;
-        }}
+            gap: 0.75rem;
+        }
 
-        .chat-container {{
-            max-height: 65vh;
-            overflow-y: auto;
-            padding: 1rem 0.5rem;
+        .user-info {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
+        .sidebar-section {
+            margin-bottom: 2rem;
+            padding: 0 1rem;
+        }
+
+        .section-title {
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: var(--accent-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
             margin-bottom: 1rem;
-            background-color: var(--bg-primary);
-            border-radius: 8px;
-            scrollbar-width: thin;
-            scrollbar-color: var(--purple) var(--bg-primary);
-        }}
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
 
-        .chat-container::-webkit-scrollbar {{
-            width: 6px;
-        }}
+        .section-title::before {
+            content: '';
+            width: 4px;
+            height: 16px;
+            background: var(--accent-gradient);
+            border-radius: 2px;
+        }
 
-        .chat-container::-webkit-scrollbar-track {{
-            background: var(--bg-primary);
-        }}
+        /* Botones morados */
+        .stButton > button {
+            border-radius: 12px;
+            padding: 0.875rem 1.5rem;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            border: none;
+            background: var(--accent-gradient);
+            color: white;
+            font-size: 0.9rem;
+        }
 
-        .chat-container::-webkit-scrollbar-thumb {{
-            background-color: var(--purple);
-            border-radius: 3px;
-        }}
+        .stButton > button:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
+        }
 
-        .message {{
-            margin-bottom: 1.25rem;
-            animation: fadeIn 0.3s ease-out;
+        .new-chat-btn {
+            width: 100%;
+            margin-bottom: 2rem;
+            background: var(--accent-gradient) !important;
+            border: none !important;
+            font-weight: 600 !important;
+        }
+
+        .secondary-btn {
+            background: var(--card-bg) !important;
+            color: var(--text-primary) !important;
+            border: 2px solid var(--border-color) !important;
+        }
+
+        .secondary-btn:hover {
+            border-color: var(--accent-primary) !important;
+            transform: translateY(-2px) !important;
+        }
+
+        /* Lista de chats */
+        .chat-list {
             display: flex;
             flex-direction: column;
-        }}
+            gap: 0.5rem;
+        }
 
-        .assistant-message {{
-            background-color: var(--assistant-bg);
-            color: var(--assistant-text);
-            padding: 0.8rem 1.2rem;
-            border-radius: 18px 18px 18px 4px;
-            max-width: 85%;
-            align-self: flex-start;
-            word-wrap: break-word;
-            text-align: left;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-            margin-right: auto;
-        }}
+        .chat-item {
+            padding: 1rem;
+            border-radius: 12px;
+            background: transparent;
+            border: 1px solid transparent;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 0.875rem;
+        }
 
         .user-message {{
             background-color: var(--user-bg);
@@ -234,77 +234,67 @@ def load_css():
             margin-left: auto;
         }}
 
-        @keyframes fadeIn {{
-            from {{ opacity: 0; transform: translateY(10px); }}
-            to {{ opacity: 1; transform: translateY(0); }}
-        }}
-
-        .stTextInput>div>div>input {{
-            border-radius: 8px;
-            padding: 12px 16px;
-            border: 1px solid var(--border);
-            box-shadow: none;
-            background-color: var(--bg-card) !important;
-            color: var(--text-primary) !important;
-        }}
-        
-        .stTextInput>label {{
-            color: var(--text-primary) !important;
-        }}
-
-        .stTextInput>div>div>input:focus {{
-            border-color: var(--purple) !important;
-            box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.2) !important;
-        }}
-
-        .stButton>button {{
-            border-radius: 8px;
-            padding: 10px 20px;
+        .chat-title {
             font-weight: 600;
-            transition: all 0.2s;
-            background-color: var(--purple) !important;
-            color: var(--text-primary) !important;
-            border: none;
-        }}
+            color: var(--text-primary);
+            margin-bottom: 0.25rem;
+        }
 
-        .stButton>button:hover {{
-            background-color: var(--purple-hover) !important;
-            transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
-        }}
+        .chat-preview {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
 
-        .logout-btn {{
-            background-color: transparent !important;
-            color: var(--purple) !important;
-            border: 1px solid var(--purple) !important;
-            margin-top: 1rem;
-        }}
-
-        .logout-btn:hover {{
-            background-color: rgba(139, 92, 246, 0.1) !important;
-        }}
-
-        .spinner {{
-            animation: spin 1s linear infinite;
-            display: inline-block;
-        }}
-
-        @keyframes spin {{
-            from {{ transform: rotate(0deg); }}
-            to {{ transform: rotate(360deg); }}
-        }}
-
-        .block-container {{
-            padding-top: 0 !important;
-        }}
-
-        .disclaimer {{
+        /* Archivos en sidebar */
+        .file-item {
+            padding: 0.75rem;
+            border-radius: 8px;
+            background: transparent;
+            border: 1px solid transparent;
+            cursor: pointer;
+            transition: all 0.3s ease;
             font-size: 0.8rem;
-            color: var(--text-secondary);
-            text-align: center;
-            margin-top: 0.5rem;
-            padding: 0.5rem;
-        }}
+            margin-bottom: 0.5rem;
+        }
+
+        .file-item:hover {
+            background: rgba(139, 92, 246, 0.1);
+            border-color: var(--accent-primary);
+        }
+
+        .file-name {
+            font-weight: 500;
+            color: var(--text-primary);
+            margin-bottom: 0.125rem;
+        }
+
+        .file-info {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+        }
+
+        /* Área principal */
+        .main-header {
+            background: var(--secondary-bg);
+            padding: 1.5rem 2rem;
+            border-bottom: 1px solid var(--border-color);
+            margin-bottom: 0;
+        }
+
+        .chat-container {
+            background: var(--primary-bg);
+            min-height: calc(100vh - 120px);
+            padding: 0;
+        }
+
+        /* Mensajes elegantes */
+        .message {
+            padding: 1.5rem 2rem;
+            animation: slideIn 0.4s ease;
+        }
 
         .chat-list {{
             max-height: 40vh;
@@ -394,8 +384,8 @@ def load_css():
 
 load_css()
 
- --- INICIALIZACIÓN DE SERVICIOS ---
- Twilio (para verificación SMS)
+# --- INICIALIZACIÓN DE SERVICIOS ---
+# Twilio (para verificación SMS)
 try:
     twilio_client = Client(
         os.getenv("TWILIO_ACCOUNT_SID"),
@@ -404,7 +394,7 @@ try:
 except Exception as e:
     st.warning(f"No se pudo inicializar Twilio: {e}")
 
- --- INICIALIZACIÓN DE ESTADO ---
+# --- INICIALIZACIÓN DE ESTADO ---
 def initialize_session_state():
     if "autenticado" not in st.session_state:
         st.session_state.autenticado = False
@@ -412,6 +402,8 @@ def initialize_session_state():
         st.session_state.usuario = None
     if "rol" not in st.session_state:
         st.session_state.rol = None
+    if "user_id" not in st.session_state:
+        st.session_state.user_id = None
     
     if "messages" not in st.session_state:
         st.session_state.messages = []
@@ -427,15 +419,16 @@ def initialize_session_state():
 
 initialize_session_state()
 
- --- GROQ HELPERS ---
+# --- GROQ HELPERS ---
 def _system_prompt():
-     Crear prompt personalizado basado en el contexto del usuario
+    # Crear prompt personalizado basado en el contexto del usuario
     base_prompt = "Eres un asistente AI llamado Zero. Sé conciso, profesional y útil."
     
-     Agregar contexto de archivos si existe
+    # Agregar contexto de archivos si existe
     if st.session_state.get("user_context"):
         context_info = "\n\nContexto personalizado del usuario:\n"
-        for ctx in st.session_state.user_context[-5:]:   Últimos 5 contextos
+        # Últimos 5 contextos
+        for ctx in st.session_state.user_context[-5:]:
             context_info += f"- {ctx['context_key']}: {ctx['context_value'][:200]}...\n"
         base_prompt += context_info
     
@@ -468,7 +461,7 @@ def groq_chat_stream(history_messages, *, model=None, max_tokens=1200, temperatu
                         obj = json.loads(data)
                         delta = obj["choices"][0]["delta"].get("content")
                         if delta:
-                             FIX ENCODING por si llega interpretado raro
+                            # FIX ENCODING por si llega interpretado raro
                             yield safe_text(delta)
                     except Exception:
                         continue
@@ -497,7 +490,7 @@ def groq_chat_nonstream(history_messages, *, model=None, max_tokens=1200, temper
     except Exception as e:
         return safe_text(f"⚠️ Error en la conexión: {e}")
 
- --- FUNCIONES UTILITARIAS UI ---
+# --- FUNCIONES UTILITARIAS UI ---
 def display_message(role, content):
     """Muestra un mensaje en el chat con el estilo adecuado."""
     if role == "assistant":
@@ -513,21 +506,32 @@ def display_message(role, content):
         )
 
 def save_current_chat():
-    """Guarda el chat actual en el historial."""
+    """Guarda el chat actual en el historial y DB."""
     if st.session_state.messages and st.session_state.get("usuario") and st.session_state.get("user_id"):
         first_message = st.session_state.messages[0]["content"] if st.session_state.messages else "Nuevo chat"
         title = first_message[:30] + "..." if len(first_message) > 30 else first_message
         
-         Actualizar en session_state
+        # Actualizar en session_state
+        if st.session_state.usuario not in st.session_state.chat_history:
+            st.session_state.chat_history[st.session_state.usuario] = {}
         st.session_state.chat_history[st.session_state.usuario][st.session_state.current_chat] = {
             "title": safe_text(title),
             "messages": st.session_state.messages.copy(),
         }
+
+        # Asegurar que el chat exista en DB
+        try:
+            # Intentar actualizar título; si el chat no existe, crearlo
+            db.update_chat_title(st.session_state.current_chat, safe_text(title))
+        except Exception:
+            pass
+        user_chats = db.get_user_chats(st.session_state.user_id)
+        if not any(c["id"] == st.session_state.current_chat for c in user_chats):
+            st.session_state.current_chat = db.create_chat(st.session_state.user_id, safe_text(title))
+        else:
+            db.update_chat_title(st.session_state.current_chat, safe_text(title))
         
-         Guardar en base de datos
-        db.update_chat_title(st.session_state.current_chat, safe_text(title))
-        
-         Guardar mensajes nuevos
+        # Guardar mensajes (nota: simple, puede duplicar si llamas muchas veces)
         for message in st.session_state.messages:
             db.add_message(
                 st.session_state.current_chat,
@@ -542,76 +546,115 @@ def load_chat(chat_id):
         st.session_state.messages = st.session_state.chat_history[st.session_state.usuario][chat_id]["messages"].copy()
         st.rerun()
 
- --- BARRA LATERAL MEJORADA ---
+# --- SIDEBAR ZERO MEJORADO ---
 def create_sidebar():
-    """Crea la barra lateral con navegación y gestión de archivos"""
-     Título de la barra lateral
-    st.markdown('<div class="sidebar-title">ZERO - Asistente Virtual</div>', unsafe_allow_html=True)
-
-     Saludo personalizado
-    usuario_nombre = st.session_state.get("usuario", "Usuario")
-    st.markdown(f'<div style="margin-bottom: 1rem;">Hola, <strong>{usuario_nombre}</strong></div>', unsafe_allow_html=True)
-
-     Lista de chats anteriores
-    st.markdown('<div class="sidebar-section">', unsafe_allow_html=True)
-    st.markdown('<div class="sidebar-section-title">💬 Chats anteriores</div>', unsafe_allow_html=True)
-    st.markdown('<div class="chat-list">', unsafe_allow_html=True)
-
-     Renderizar chats del usuario actual
-    if st.session_state.get("user_id"):
-        try:
-            user_chats = db.get_user_chats(st.session_state.user_id)
-            for chat in user_chats[-10:]:   Mostrar últimos 10 chats
-                is_active = chat['chat_id'] == st.session_state.current_chat
-                preview = chat['title'][:50] + "..." if len(chat['title']) > 50 else chat['title']
-                
-                st.markdown(
-                    f"""
-                    <div class="chat-item {'active' if is_active else ''}">
-                        <div><strong>{chat['title']}</strong></div>
-                        <div class="chat-preview">{preview}</div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-                
-                 Botón para cargar el chat
-                if st.button("Abrir", key=f"open_{chat['id']}"):
-                    st.session_state.current_chat = chat['chat_id']
-                     Cargar mensajes del chat
-                    chat_messages = db.get_chat_messages(chat['chat_id'])
-                    st.session_state.messages = [
-                        {"role": msg['role'], "content": msg['content']} 
-                        for msg in chat_messages
-                    ]
-                    st.rerun()
-        except Exception as e:
-            st.write("No hay chats anteriores")
-
-    st.markdown('</div>', unsafe_allow_html=True)
-
-     Botón de nuevo chat
-    if st.button("➕ Nuevo Chat", use_container_width=True):
-        save_current_chat()
-        st.session_state.current_chat = str(uuid.uuid4())
-        st.session_state.messages = []
-        st.rerun()
-
-    st.markdown('</div>', unsafe_allow_html=True)
-
-     Sección de archivos del usuario
-    st.markdown('<div class="sidebar-section">', unsafe_allow_html=True)
-    st.markdown('<div class="sidebar-section-title">📁 Mis Archivos</div>', unsafe_allow_html=True)
-    
-    if st.session_state.get("user_files"):
-         Mostrar últimos 5 archivos
-        for file_data in st.session_state.user_files[-5:]:
-            st.markdown("""
-            <div style="background-color: #d9edf7; padding: 20px; border-radius: 8px; color: #31708f; text-align: center;">
-            <h4>Sube tus archivos aquí</h4>
+    """Crea la barra lateral con diseño Zero mejorado"""
+    with st.sidebar:
+        # Header del sidebar
+        st.markdown(f"""
+            <div class="sidebar-header">
+                <div class="sidebar-title">
+                    <div>⚡</div>
+                    <div>ZERO</div>
+                </div>
+                <div class="user-info">
+                    Hola, {st.session_state.get('usuario', 'Usuario')}
+                </div>
             </div>
-            """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
+        
+        # Botón nuevo chat morado
+        if st.button("Nuevo Chat", key="new_chat_btn", use_container_width=True, type="primary"):
+            save_current_chat()
+            st.session_state.current_chat = str(uuid.uuid4())
+            st.session_state.messages = []
+            st.rerun()
+        
+        # Sección de chats anteriores
+        st.markdown('<div class="sidebar-section">', unsafe_allow_html=True)
+        st.markdown('<div class="section-title">Conversaciones</div>', unsafe_allow_html=True)
+        
+        if st.session_state.get("user_id"):
+            try:
+                user_chats = db.get_user_chats(st.session_state.user_id)
+                if user_chats:
+                    user_chats.sort(key=lambda x: x.get('created_at', ''), reverse=True)
+                    
+                    for chat in user_chats[:8]:
+                        is_active = chat['chat_id'] == st.session_state.current_chat
+                        preview = chat['title'][:25] + "..." if len(chat['title']) > 25 else chat['title']
+                        
+                        if st.button(
+                            preview,
+                            key=f"chat_{chat['chat_id']}",
+                            use_container_width=True,
+                            type="primary" if is_active else "secondary"
+                        ):
+                            st.session_state.current_chat = chat['chat_id']
+                            chat_messages = db.get_chat_messages(chat['chat_id'])
+                            st.session_state.messages = [
+                                {"role": msg['role'], "content": msg['content']}
+                                for msg in chat_messages
+                            ]
+                            st.rerun()
+                else:
+                    st.info("Inicia tu primera conversación")
+            except Exception as e:
+                st.error("Error cargando conversaciones")
+        
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+        # Sección de archivos
+        st.markdown('<div class="sidebar-section">', unsafe_allow_html=True)
+        st.markdown('<div class="section-title">Archivos</div>', unsafe_allow_html=True)
+        
+        if not st.session_state.get("user_files"):
+            st.session_state.user_files = db.get_user_files(st.session_state.user_id)
+        
+        if st.session_state.user_files:
+            for file_data in st.session_state.user_files[:4]:
+                if st.button(
+                    f"{file_data['filename'][:20]}...",
+                    key=f"sidebar_file_{file_data['id']}",
+                    use_container_width=True,
+                    help=f"Usar {file_data['filename']} en el chat"
+                ):
+                    if file_data.get('content_extracted'):
+                        content_msg = f"Archivo: {file_data['filename']}\n\n{file_data['content_extracted'][:250]}..."
+                        st.session_state.messages.append({"role": "user", "content": content_msg})
+                        st.success("Archivo agregado al chat")
+                        st.rerun()
+        else:
+            st.info("Sube tu primer archivo")
+        
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+        # Navegación principal con botones morados
+        st.markdown('<div class="sidebar-section">', unsafe_allow_html=True)
+        st.markdown('<div class="section-title">Navegación</div>', unsafe_allow_html=True)
+        
+        # Botones de navegación morados
+        if st.button("Chat con Zero", key="nav_chat", use_container_width=True, type="primary"):
+            st.session_state.current_page = "chat"
+            st.rerun()
+        
+        if st.button("Gestor de Archivos", key="nav_files", use_container_width=True, type="primary"):
+            st.session_state.current_page = "files"
+            st.rerun()
+            
+        if st.session_state.rol == "admin":
+            if st.button("Panel Admin", key="nav_admin", use_container_width=True, type="primary"):
+                st.session_state.current_page = "admin"
+                st.rerun()
+        
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+        # Footer del sidebar
+        st.markdown("---")
+        if st.button("Cerrar Sesión", use_container_width=True, type="secondary"):
+            logout()
 
+<<<<<<< HEAD
             )
     else:
         st.markdown('<div style="color: var(--text-secondary); font-size: 0.9rem; text-align: center; padding: 1rem;">No hay archivos subidos</div>', unsafe_allow_html=True)
@@ -638,84 +681,97 @@ def create_sidebar():
     
     return selected_option
 
- --- FUNCIONES DE UTILIDAD PARA ARCHIVOS ---
-MAX_FILE_SIZE_MB = 20  # límite de 20 MB por archivo
-ALLOWED_EXTENSIONS = {
-    ".txt", ".pdf", ".docx", ".xlsx", ".pptx",
-    ".jpg", ".jpeg", ".png"
-}
-
-def save_uploaded_file(uploaded_file, user_id: int):
-    """Guarda y procesa un archivo subido de manera segura."""
+# --- FUNCIONES DE UTILIDAD PARA ARCHIVOS ---
+def save_uploaded_file(uploaded_file, user_id):
+    """Guarda un archivo subido y lo procesa"""
     try:
-        if not uploaded_file:
-            return None, "No se recibió ningún archivo."
-
-        # ─── Validar extensión ───────────────────────────────
-        _, ext = os.path.splitext(uploaded_file.name.lower())
-        if ext not in ALLOWED_EXTENSIONS:
-            return None, f"Tipo de archivo no permitido ({ext})."
-
-        # ─── Validar tamaño ─────────────────────────────────
-        uploaded_file.seek(0, os.SEEK_END)
-        file_size_mb = uploaded_file.tell() / (1024 * 1024)
-        uploaded_file.seek(0)
-        if file_size_mb > MAX_FILE_SIZE_MB:
-            return None, f"El archivo supera el límite de {MAX_FILE_SIZE_MB} MB."
-
-        # ─── Crear carpeta de usuario ───────────────────────
-        user_dir = os.path.join("uploads", str(user_id))
+        # Crear directorio del usuario si no existe
+        user_dir = f"uploads/{user_id}"
         os.makedirs(user_dir, exist_ok=True)
-
-        # ─── Asegurar nombre de archivo seguro ──────────────
-        safe_name = secure_filename(uploaded_file.name)
-        file_path = os.path.join(user_dir, safe_name)
-
-        # ─── Guardar archivo físico ─────────────────────────
+        
+        # Guardar archivo físico
+        file_path = os.path.join(user_dir, uploaded_file.name)
         with open(file_path, "wb") as f:
             f.write(uploaded_file.getbuffer())
-
-        st.success(f"✅ Archivo guardado correctamente: {safe_name}")
-
-        # ─── Procesar contenido ─────────────────────────────
-        file_bytes = uploaded_file.getvalue()
+        
+        # Procesar archivo con FileProcessor (usa BYTES + nombre)
         processor = FileProcessor()
-        result = processor.process_file(file_bytes, safe_name)
-
-        if result.get("error"):
-            return None, f"Error al procesar el archivo: {result['error']}"
-
-        content = result.get("content", "")
-        file_type = result.get("file_type", "desconocido")
-
-        # ─── Generar resumen ────────────────────────────────
-        summary = processor.generate_summary(content, file_type)
-
-        # ─── Guardar en base de datos ───────────────────────
-        db = ZeroDatabase()
-        file_id = db.save_file(user_id, safe_name, file_path, file_type, summary)
-
-        # ─── Guardar contexto asociado ──────────────────────
+        file_bytes = uploaded_file.getvalue()
+        result = processor.process_file(file_bytes, uploaded_file.name)
+        content = result.get("content")
+        summary = processor.generate_summary(content or "", result.get("file_type", "desconocido"))
+        error = result.get("error")
+        
+        if error:
+            return None, error
+        
+        # Guardar en base de datos
+        file_id = db.save_file(
+            user_id=user_id,
+            filename=uploaded_file.name,
+            file_path=file_path,
+            file_type=result.get("file_type", "unknown"),
+            file_size=uploaded_file.size,
+            content_extracted=content,
+            analysis_summary=summary
+        )
+        
+        # Agregar al contexto del usuario
         if content:
-            db.save_user_context(user_id, content)
-
-        # ─── Registrar en sesión ────────────────────────────
-        if "user_files" not in st.session_state:
-            st.session_state["user_files"] = []
-        st.session_state["user_files"].append({
-            "id": file_id,
-            "name": safe_name,
-            "summary": summary,
-            "path": file_path
-        })
-
+            context_key = f"Archivo: {uploaded_file.name}"
+            db.save_user_context(user_id, context_key, content, file_id)
+        
         return file_id, None
-
+        
     except Exception as e:
-        return None, f"Ocurrió un error al guardar el archivo: {str(e)}"
+        return None, str(e)
+=======
+# --- SISTEMA DE ARCHIVOS ---
+def analyze_document_with_groq(content, filename):
+    """Analiza documentos con Groq"""
+    try:
+        content_preview = content[:3000]
+        
+        prompt = f"""
+        Analiza este documento '{filename}' y proporciona un análisis profesional:
+
+        Resumen Ejecutivo
+        Extrae los puntos más importantes
+
+        Información Clave 
+        Datos, cifras y información relevante
+
+        Análisis y Perspectiva
+        Interpretación y contexto
+
+        Aplicaciones Prácticas
+        Cómo usar esta información
+
+        Contenido:
+        {content_preview}
+        """
+
+        payload = {
+            "model": GROQ_TEXT_MODEL,
+            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": 1200,
+            "temperature": 0.3
+        }
+
+        response = requests.post(API_URL, headers=BASE_HEADERS, json=payload, timeout=60)
+        
+        if response.status_code == 200:
+            result = response.json()
+            return result['choices'][0]['message']['content']
+        else:
+            return f"Análisis completado para {filename}"
+            
+    except Exception as e:
+        return f"Documento procesado: {filename}"
+>>>>>>> 918a0b7ec70a7fdac1eccf92f61a80f998591047
 
 def analyze_image_with_groq(image_base64, filename):
-    """Analiza una imagen usando Groq Vision"""
+    """Analiza imágenes con Groq Vision"""
     try:
         payload = {
             "model": GROQ_VISION_MODEL,
@@ -725,7 +781,19 @@ def analyze_image_with_groq(image_base64, filename):
                     "content": [
                         {
                             "type": "text",
-                            "text": f"Analiza esta imagen llamada '{filename}' y proporciona una descripción detallada de lo que ves, incluyendo elementos importantes, texto visible, colores, objetos, personas, y cualquier información relevante que pueda ser útil para futuras conversaciones."
+                            "text": f"""Analiza esta imagen '{filename}' de manera profesional:
+
+Descripción Visual
+Describe el contenido de forma detallada
+
+Elementos Principales 
+Objetos, colores, texto visible
+
+Contexto e Interpretación
+Significado y contexto posible
+
+Detalles Destacados
+Elementos notables o importantes"""
                         },
                         {
                             "type": "image_url",
@@ -740,99 +808,196 @@ def analyze_image_with_groq(image_base64, filename):
             "temperature": 0.3
         }
         
-        response = requests.post(API_URL, headers=BASE_HEADERS, json=payload)
+        response = requests.post(API_URL, headers=BASE_HEADERS, json=payload, timeout=60)
         
         if response.status_code == 200:
             result = response.json()
             return result['choices'][0]['message']['content']
         else:
-            return f"Error en análisis: {response.status_code}"
+            return f"Análisis visual completado para {filename}"
             
     except Exception as e:
-        return f"Error procesando imagen: {str(e)}"
+        return f"Imagen procesada: {filename}"
 
-def get_personalized_context(user_id, query):
-    """Obtiene contexto personalizado basado en archivos del usuario"""
+def save_uploaded_file(uploaded_file):
+    """Guarda y procesa archivos subidos"""
     try:
-        user_context = db.get_user_context(user_id)
-        if not user_context:
-            return ""
+        file_type = uploaded_file.name.split('.')[-1].lower()
+        file_types = {
+            'pdf': 'pdf', 'docx': 'word', 'doc': 'word', 'txt': 'text',
+            'md': 'markdown', 'xlsx': 'excel', 'xls': 'excel', 'csv': 'csv',
+            'jpg': 'image', 'jpeg': 'image', 'png': 'image', 'gif': 'image'
+        }
+        file_type = file_types.get(file_type, 'unknown')
         
-         Buscar contexto relevante basado en la consulta
-        relevant_context = []
-        query_lower = query.lower()
-        
-        for context in user_context:
-            context_content = context['context_data'].lower()
-             Búsqueda simple por palabras clave
-            if any(word in context_content for word in query_lower.split() if len(word) > 3):
-                relevant_context.append({
-                    'key': context['context_key'],
-                    'content': context['context_data'][:500] + "..." if len(context['context_data']) > 500 else context['context_data']
-                })
-        
-        if relevant_context:
-            context_text = "\n\nContexto personalizado basado en tus archivos:\n"
-            for ctx in relevant_context[:3]:   Limitar a 3 contextos más relevantes
-                context_text += f"\n**{ctx['key']}:**\n{ctx['content']}\n"
-            return context_text
-        
-        return ""
-        
-    except Exception as e:
-        print(f"Error obteniendo contexto personalizado: {e}")
-        return ""
+        if file_type == 'unknown':
+            return None, "Tipo de archivo no soportado"
 
- --- FUNCIONES DE CHAT MEJORADAS ---
+        user_dir = f"user_uploads/{st.session_state.user_id}"
+        os.makedirs(user_dir, exist_ok=True)
+        file_path = os.path.join(user_dir, uploaded_file.name)
+
+        with open(file_path, "wb") as f:
+            f.write(uploaded_file.getbuffer())
+
+        content = ""
+        analysis = ""
+        
+        if file_type == 'image':
+            image_base64 = b64encode(uploaded_file.getvalue()).decode('utf-8')
+            analysis = analyze_image_with_groq(image_base64, uploaded_file.name)
+            content = "Imagen procesada para análisis visual"
+        else:
+            file_content = uploaded_file.getvalue()
+            
+            if file_type in ['pdf', 'word']:
+                processor = FileProcessor()
+                result = processor.process_file(file_content, uploaded_file.name)
+                content = result.get('content', '')[:5000]
+            else:
+                try:
+                    content = file_content.decode('utf-8')[:5000]
+                except:
+                    content = file_content.decode('latin-1')[:5000]
+            
+            if content and len(content.strip()) > 50:
+                analysis = analyze_document_with_groq(content, uploaded_file.name)
+            else:
+                analysis = f"Documento procesado: {uploaded_file.name}"
+
+        file_id = db.save_file(
+            user_id=st.session_state.user_id,
+            filename=uploaded_file.name,
+            file_path=file_path,
+            file_type=file_type,
+            file_size=uploaded_file.size,
+            content_extracted=content,
+            analysis_summary=analysis[:350]
+        )
+
+        if analysis:
+            context_key = f"Archivo: {uploaded_file.name}"
+            db.save_user_context(st.session_state.user_id, context_key, analysis, file_id)
+
+        return file_id, None
+
+    except Exception as e:
+        return None, f"Error procesando archivo: {str(e)}"
+
+# --- PROCESAMIENTO DE ECUACIONES ---
+def render_latex_in_message(content):
+    """Convierte ecuaciones LaTeX en formato legible"""
+    inline_pattern = r'\$(.*?)\$'
+    block_pattern = r'\$\$(.*?)\$\$'
+    
+    content = re.sub(block_pattern, r'<div class="latex-formula">\1</div>', content)
+    content = re.sub(inline_pattern, r'<span class="latex-formula">\1</span>', content)
+    
+    return content
+
+# --- PÁGINA PRINCIPAL DEL CHAT ---
 def chat_page():
-    """Página principal de chat con contexto personalizado"""
-    st.title("💬 Chat con Zero")
+    """Página principal del chat con diseño Zero"""
     
-     Mostrar mensajes del chat actual
-    chat_container = st.container()
-    with chat_container:
-        if st.session_state.messages:
-            for message in st.session_state.messages:
-                with st.chat_message(message["role"]):
-                    st.markdown(message["content"])
+    # Header
+    st.markdown("""
+        <div class="main-header">
+            <div style="display: flex; align-items: center; gap: 1rem;">
+                <div style="font-size: 2rem;">⚡</div>
+                <div>
+                    <h1 style="margin: 0; color: var(--text-primary); font-weight: 800;">
+                        ZERO AI
+                    </h1>
+                    <p style="margin: 0; color: var(--text-secondary); font-size: 0.9rem;">
+                        Tu asistente de IA avanzado
+                    </p>
+                </div>
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
     
-     Input del usuario
-    if prompt := st.chat_input("Escribe tu mensaje aquí..."):
-         Agregar mensaje del usuario
+    # Contenedor del chat
+    st.markdown('<div class="chat-container">', unsafe_allow_html=True)
+    
+    # Mostrar mensajes
+    if st.session_state.messages:
+        for message in st.session_state.messages:
+            avatar = "👤" if message["role"] == "user" else "⚡"
+            bg_class = "user-message" if message["role"] == "user" else "assistant-message"
+            avatar_class = "message-avatar" if message["role"] == "user" else "message-avatar assistant-avatar"
+            
+            content_with_math = render_latex_in_message(safe_text(message["content"]))
+            
+            st.markdown(f"""
+                <div class="message {bg_class}">
+                    <div class="message-content">
+                        <div class="{avatar_class}">{avatar}</div>
+                        <div class="message-text">{content_with_math}</div>
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
+    else:
+        # Mensaje de bienvenida
+        st.markdown("""
+            <div style="text-align: center; padding: 4rem 2rem; color: var(--text-muted);">
+                <div style="font-size: 6rem; margin-bottom: 2rem;">⚡</div>
+                <h2 style="color: var(--text-primary); margin-bottom: 1rem; font-weight: 800;">
+                    Bienvenido a ZERO
+                </h2>
+                <p style="margin-bottom: 3rem; line-height: 1.6; font-size: 1.1rem; color: var(--text-secondary);">
+                    Asistente de IA avanzado con capacidades de análisis de documentos,<br>
+                    procesamiento de imágenes y soporte para ecuaciones matemáticas.
+                </p>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem; max-width: 800px; margin: 0 auto;">
+                    <div style="background: var(--card-bg); padding: 2rem; border-radius: 16px; border: 1px solid var(--border-color); text-align: center;">
+                        <div style="font-size: 3rem; margin-bottom: 1rem;">💬</div>
+                        <div style="font-weight: 700; margin-bottom: 0.5rem; color: var(--text-primary); font-size: 1.1rem;">Chat Inteligente</div>
+                        <div style="font-size: 0.9rem; color: var(--text-secondary);">Conversaciones naturales y contextuales</div>
+                    </div>
+                    <div style="background: var(--card-bg); padding: 2rem; border-radius: 16px; border: 1px solid var(--border-color); text-align: center;">
+                        <div style="font-size: 3rem; margin-bottom: 1rem;">📁</div>
+                        <div style="font-weight: 700; margin-bottom: 0.5rem; color: var(--text-primary); font-size: 1.1rem;">Análisis de Archivos</div>
+                        <div style="font-size: 0.9rem; color: var(--text-secondary);">Procesa documentos e imágenes</div>
+                    </div>
+                    <div style="background: var(--card-bg); padding: 2rem; border-radius: 16px; border: 1px solid var(--border-color); text-align: center;">
+                        <div style="font-size: 3rem; margin-bottom: 1rem;">🧮</div>
+                        <div style="font-weight: 700; margin-bottom: 0.5rem; color: var(--text-primary); font-size: 1.1rem;">Soporte Matemático</div>
+                        <div style="font-size: 0.9rem; color: var(--text-secondary);">Ecuaciones y análisis avanzado</div>
+                    </div>
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+    
+    # Input del chat
+    if prompt := st.chat_input("Escribe tu mensaje..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
         
-        with st.chat_message("user"):
-            st.markdown(prompt)
-        
-         Obtener contexto personalizado
-        personalized_context = ""
-        if st.session_state.get("user_id"):
-            personalized_context = get_personalized_context(st.session_state.user_id, prompt)
-        
-         Preparar mensaje con contexto
-        enhanced_prompt = prompt
-        if personalized_context:
-            enhanced_prompt = f"{prompt}{personalized_context}"
-        
-         Generar respuesta
         with st.chat_message("assistant"):
             message_placeholder = st.empty()
             full_response = ""
             
             try:
-                 Preparar mensajes para la API
-                messages_for_api = []
-                for msg in st.session_state.messages[:-1]:   Excluir el último mensaje del usuario
-                    messages_for_api.append({
-                        "role": msg["role"],
-                        "content": msg["content"]
-                    })
+                # Mostrar animación de typing
+                message_placeholder.markdown("""
+                    <div style="display: flex; align-items: center; gap: 0.5rem; color: var(--text-muted);">
+                        <div style="display: flex; gap: 3px;">
+                            <div style="width: 6px; height: 6px; border-radius: 50%; background: var(--accent-primary); animation: bounce 1.4s infinite ease-in-out;"></div>
+                            <div style="width: 6px; height: 6px; border-radius: 50%; background: var(--accent-primary); animation: bounce 1.4s infinite ease-in-out 0.2s;"></div>
+                            <div style="width: 6px; height: 6px; border-radius: 50%; background: var(--accent-primary); animation: bounce 1.4s infinite ease-in-out 0.4s;"></div>
+                        </div>
+                        <div>Zero está pensando...</div>
+                    </div>
+                    <style>
+                        @keyframes bounce {
+                            0%, 80%, 100% { transform: scale(0); }
+                            40% { transform: scale(1); }
+                        }
+                    </style>
+                """, unsafe_allow_html=True)
                 
-                 Agregar el mensaje actual con contexto
-                messages_for_api.append({
-                    "role": "user",
-                    "content": enhanced_prompt
-                })
+                messages_for_api = st.session_state.messages.copy()
                 
                 payload = {
                     "model": GROQ_TEXT_MODEL,
@@ -842,7 +1007,7 @@ def chat_page():
                     "temperature": 0.7
                 }
                 
-                response = requests.post(API_URL, headers=STREAM_HEADERS, json=payload, stream=True)
+                response = requests.post(API_URL, headers=STREAM_HEADERS, json=payload, stream=True, timeout=120)
                 
                 if response.status_code == 200:
                     for line in response.iter_lines():
@@ -858,61 +1023,26 @@ def chat_page():
                                         delta = json_data['choices'][0].get('delta', {})
                                         if 'content' in delta:
                                             full_response += delta['content']
-                                            message_placeholder.markdown(full_response + "▌")
-                                except json.JSONDecodeError:
+                                            response_with_math = render_latex_in_message(full_response + "▌")
+                                            message_placeholder.markdown(response_with_math, unsafe_allow_html=True)
+                                except:
                                     continue
                     
-                    message_placeholder.markdown(full_response)
+                    final_response = render_latex_in_message(full_response)
+                    message_placeholder.markdown(final_response, unsafe_allow_html=True)
                 else:
-                    error_msg = f"Error {response.status_code}: {response.text}"
-                    message_placeholder.markdown(f"❌ {error_msg}")
-                    full_response = error_msg
+                    full_response = "Lo siento, hubo un error al procesar tu solicitud. Por favor, intenta nuevamente."
+                    message_placeholder.markdown(full_response)
                     
             except Exception as e:
-                error_msg = f"Error de conexión: {str(e)}"
-                message_placeholder.markdown(f"❌ {error_msg}")
-                full_response = error_msg
+                full_response = "Error de conexión. Por favor, verifica tu conexión a internet."
+                message_placeholder.markdown(full_response)
         
-         Guardar respuesta del asistente
         st.session_state.messages.append({"role": "assistant", "content": full_response})
-        
-         Guardar chat en base de datos
         save_current_chat()
-        
-         Auto-scroll
         st.rerun()
 
-def save_current_chat():
-    """Guarda el chat actual en la base de datos"""
-    if st.session_state.get("user_id") and st.session_state.messages:
-        try:
-             Generar título del chat basado en el primer mensaje
-            title = "Nuevo chat"
-            if st.session_state.messages:
-                first_user_msg = next((msg['content'] for msg in st.session_state.messages if msg['role'] == 'user'), "")
-                if first_user_msg:
-                    title = first_user_msg[:50] + "..." if len(first_user_msg) > 50 else first_user_msg
-            
-             Guardar o actualizar chat
-            chat_id = db.save_chat(
-                user_id=st.session_state.user_id,
-                chat_id=st.session_state.current_chat,
-                title=title
-            )
-            
-             Guardar mensajes
-            for i, message in enumerate(st.session_state.messages):
-                db.save_message(
-                    chat_id=chat_id,
-                    role=message['role'],
-                    content=message['content'],
-                    message_order=i
-                )
-                
-        except Exception as e:
-            print(f"Error guardando chat: {e}")
-
- --- FUNCIONES EXISTENTES MEJORADAS ---
+# --- PÁGINAS EXISTENTES MEJORADAS ---
 def image_page():
     """Página de análisis de imágenes mejorada"""
     st.title("🖼️ Análisis de Imágenes")
@@ -924,28 +1054,29 @@ def image_page():
     )
     
     if uploaded_file is not None:
-         Mostrar imagen
+        # Mostrar imagen
         image = Image.open(uploaded_file)
         st.image(image, caption=uploaded_file.name, use_column_width=True)
         
         if st.button("🔍 Analizar Imagen", type="primary"):
             with st.spinner("Analizando imagen..."):
-                 Convertir a base64
+                # Convertir a base64
                 image_base64 = b64encode(uploaded_file.getvalue()).decode('utf-8')
                 
-                 Analizar con Groq Vision
+                # Analizar con Groq Vision
                 analysis = analyze_image_with_groq(image_base64, uploaded_file.name)
                 
-                 Mostrar resultado
+                # Mostrar resultado
                 st.subheader("📋 Análisis de la Imagen")
                 st.write(analysis)
                 
-                 Guardar análisis si el usuario está autenticado
+                # Guardar análisis si el usuario está autenticado
                 if st.session_state.get("user_id"):
                     try:
+                        image_disk_path = f"uploads/{st.session_state.user_id}/{uploaded_file.name}"
                         db.save_image_analysis(
                             user_id=st.session_state.user_id,
-                            image_path=f"temp/{uploaded_file.name}",
+                            image_path=image_disk_path,
                             analysis_result=analysis,
                             model_used=GROQ_VISION_MODEL
                         )
@@ -958,7 +1089,7 @@ def audio_page():
     st.title("🎤 Transcripción de Audio")
     st.write("Habla y Zero convertirá tu voz a texto.")
     
-     Configuración de WebRTC
+    # Configuración de WebRTC
     webrtc_ctx = webrtc_streamer(
         key="speech-to-text",
         mode=WebRtcMode.SENDONLY,
@@ -969,7 +1100,7 @@ def audio_page():
     if webrtc_ctx.audio_receiver:
         st.write("🎙️ Grabando... Habla ahora")
         
-         Procesar audio (implementación simplificada)
+        # Procesar audio (implementación simplificada)
         audio_frames = []
         while True:
             try:
@@ -980,8 +1111,8 @@ def audio_page():
         
         if audio_frames:
             st.write("🔄 Procesando audio...")
-             Aquí iría la lógica de transcripción
-            st.write("📝 Transcripción: [Funcionalidad en desarrollo]")
+            # Aquí iría la lógica de transcripción
+            st.write("📝 **Transcripción:** [Funcionalidad en desarrollo]")
 
 def register_page():
     """Página de registro de usuarios (solo admin)"""
@@ -1018,170 +1149,131 @@ def register_page():
                         st.error("❌ Error al registrar usuario. Puede que ya exista.")
                 except Exception as e:
                     st.error(f"❌ Error: {str(e)}")
+
 def file_upload_page():
     """Página para subir y gestionar archivos"""
     st.title("📁 Gestión de Archivos")
     st.write("Sube documentos e imágenes para que Zero pueda usarlos en las conversaciones.")
-    
-     Verificar que el usuario esté autenticado
+
+    # Verificar que el usuario esté autenticado
     if not st.session_state.get("usuario"):
         st.error("❌ Error de sesión. Por favor, vuelve a iniciar sesión.")
         return
-    
-     Obtener user_id desde la base de datos usando el username
+
+    # Obtener user_id desde la base de datos usando el username
     username = st.session_state.usuario
     user_id = db.get_user_id_by_username(username)
-    
+
     if not user_id:
         st.error("❌ No se pudo obtener la información del usuario.")
         return
-    
-     Sección de subida de archivos
+
+    # Sección de subida de archivos
     st.subheader("📤 Subir Nuevo Archivo")
-    
+
     uploaded_file = st.file_uploader(
         "Elige un archivo",
         type=["pdf", "docx", "doc", "txt", "xlsx", "xls", "csv", "jpg", "jpeg", "png", "gif", "bmp", "webp"],
         help="Formatos soportados: PDF, Word, Excel, TXT, CSV e imágenes"
     )
-    
+
     if uploaded_file is not None:
-         Mostrar información del archivo
-        st.info(f"📄 **{uploaded_file.name}** ({uploaded_file.size / 1024:.1f} KB)")
-        
+        st.info(f"📄 {uploaded_file.name} ({uploaded_file.size / 1024:.1f} KB)")
         if st.button("🚀 Procesar Archivo", type="primary"):
             with st.spinner("Procesando archivo..."):
-                 Guardar y procesar archivo
-                file_id, error = save_uploaded_file(uploaded_file, user_id)
-                
+                # Guardar y procesar archivo
+                file_id, error = save_uploaded_file(uploaded_file)
                 if error:
                     st.error(f"❌ Error al procesar archivo: {error}")
                 else:
                     st.success("✅ Archivo procesado y guardado exitosamente")
-                    
-                     Si es una imagen, realizar análisis con Groq Vision
+                    # Si es una imagen, realizar análisis con Groq Vision
                     if uploaded_file.type.startswith('image/'):
                         with st.spinner("Analizando imagen con Groq Vision..."):
                             image_base64 = b64encode(uploaded_file.getvalue()).decode('utf-8')
                             analysis = analyze_image_with_groq(image_base64, uploaded_file.name)
-                            
-                             Guardar análisis
                             db.save_image_analysis(
                                 user_id=user_id,
-                                image_path=f"uploads/{user_id}/{uploaded_file.name}",
+                                image_path=f"user_uploads/{user_id}/{uploaded_file.name}",
                                 analysis_result=analysis,
                                 model_used=GROQ_VISION_MODEL,
                                 archivo_id=file_id
                             )
-                            
-                             Agregar análisis al contexto
                             context_key = f"Análisis de imagen: {uploaded_file.name}"
                             db.save_user_context(user_id, context_key, analysis, file_id)
-                            
                             st.success("🖼️ Imagen analizada con Groq Vision")
-                    
-                     Actualizar archivos en sesión
+                    # Actualizar archivos y contexto en sesión
                     st.session_state.user_files = db.get_user_files(user_id)
                     st.session_state.user_context = db.get_user_context(user_id)
-                    
                     st.rerun()
-    
-     Sección de archivos existentes
+
+    # Sección de archivos existentes
     st.subheader("📋 Archivos Subidos")
-    
-     Cargar archivos del usuario si no están en sesión
+
     if "user_files" not in st.session_state:
         st.session_state.user_files = db.get_user_files(user_id)
-    
+
     if st.session_state.get("user_files"):
         for file_data in st.session_state.user_files:
             with st.expander(f"📄 {file_data['filename']}"):
                 col1, col2 = st.columns([3, 1])
-                
                 with col1:
                     st.write(f"**Tipo:** {file_data['file_type'].upper()}")
                     st.write(f"**Tamaño:** {file_data['file_size'] / 1024:.1f} KB")
                     st.write(f"**Subido:** {file_data['uploaded_at']}")
-                    
                     if file_data.get('analysis_summary'):
                         st.write(f"**Resumen:** {file_data['analysis_summary'][:200]}...")
-                
                 with col2:
                     if st.button(f"🗑️ Eliminar", key=f"delete_{file_data['id']}"):
-                         Eliminar archivo físico
                         try:
                             if os.path.exists(file_data['file_path']):
                                 os.remove(file_data['file_path'])
-                        except:
+                        except Exception:
                             pass
-                        
-                         Eliminar de base de datos
                         db.delete_file(file_data['id'], user_id)
-                        
-                         Actualizar sesión
                         st.session_state.user_files = db.get_user_files(user_id)
                         st.session_state.user_context = db.get_user_context(user_id)
-                        
                         st.success("🗑️ Archivo eliminado")
                         st.rerun()
-                    
                     if st.button(f"💬 Usar en Chat", key=f"use_{file_data['id']}"):
                         if file_data.get('content_extracted'):
-                             Agregar contenido al chat actual
-                            content_message = f"📄 **Contenido de {file_data['filename']}:**\n\n{file_data['content_extracted'][:1000]}..."
+                            content_message = f"📄 **Contenido de {file_data['filename']}**:\n\n{file_data['content_extracted'][:1000]}..."
                             st.session_state.messages.append({
-                                "role": "user", 
+                                "role": "user",
                                 "content": content_message
                             })
-                            
-                             Cambiar a página de chat
-                            st.session_state.menu_option = "Chat Principal"
+                            # Cambiar a página de chat de forma segura
+                            st.session_state.current_page = "chat"
                             st.success(f"📄 Contenido de {file_data['filename']} agregado al chat")
                             st.rerun()
     else:
         st.info("📭 No tienes archivos subidos aún. ¡Sube tu primer archivo!")
         
- --- FUNCIÓN PRINCIPAL ---
+# --- FUNCIÓN PRINCIPAL ---
 def main():
-    """Función principal de la aplicación"""
-    load_css()
+    """Aplicación principal"""
     
-     Verificar autenticación
-    if not st.session_state.get("autenticado", False):
-        verificar_login()
-        return
-    
-     Inicializar base de datos y cargar datos del usuario
+    # Inicializar datos del usuario
     if st.session_state.get("user_id") and "user_files" not in st.session_state:
-        st.session_state.user_files = db.get_user_files(st.session_state.user_id)
-        st.session_state.user_context = db.get_user_context(st.session_state.user_id)
-        
-         Cargar historial de chats
-        user_chats = db.get_user_chats(st.session_state.user_id)
-        if user_chats:
-             Cargar mensajes del chat actual
-            current_chat_messages = db.get_chat_messages(st.session_state.current_chat)
-            if current_chat_messages:
-                st.session_state.messages = [
-                    {"role": msg['role'], "content": msg['content']} 
-                    for msg in current_chat_messages
-                ]
+        try:
+            st.session_state.user_files = db.get_user_files(st.session_state.user_id)
+        except:
+            st.session_state.user_files = []
     
-     Sidebar con navegación
-    with st.sidebar:
-        selected_option = create_sidebar()
+    # Navegación desde sidebar
+    create_sidebar()
     
-     Navegación principal
-    if selected_option == "Chat Principal":
+    # Determinar página actual (simplificado)
+    if "current_page" not in st.session_state:
+        st.session_state.current_page = "chat"
+    
+    # Renderizar página seleccionada
+    if st.session_state.current_page == "chat":
         chat_page()
-    elif selected_option == "Subir Archivos":
-        file_upload_page()
-    elif selected_option == "Análisis de Imágenes":
-        image_page()
-    elif selected_option == "Transcripción de Audio":
-        audio_page()
-    elif selected_option == "Registro de Usuarios":
-        register_page()
+    elif st.session_state.current_page == "files":
+        files_page()
+    elif st.session_state.current_page == "admin":
+        admin_page()
 
 if __name__ == "__main__":
     main()

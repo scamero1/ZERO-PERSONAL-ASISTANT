@@ -1,0 +1,468 @@
+/* Estilos base */
+@import url('https://fonts.googleapis.com/css2?family=Courier+New:wght@400;700&display=swap');
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    background: 
+        radial-gradient(circle at 20% 80%, #00ff88 0%, transparent 50%),
+        radial-gradient(circle at 80% 20%, #ff0080 0%, transparent 50%),
+        radial-gradient(circle at 40% 40%, #8000ff 0%, transparent 50%),
+        linear-gradient(45deg, #000000 0%, #1a0033 100%);
+    min-height: 100vh;
+    animation: matrixBg 20s linear infinite;
+    font-family: 'Courier New', monospace;
+    overflow: hidden;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+@keyframes matrixBg {
+    0% { background-position: 0% 0%, 0% 0%, 0% 0%; }
+    100% { background-position: 100% 100%, 100% 100%, 100% 100%; }
+}
+
+/* Contenedor principal */
+.cyber-container {
+    width: 100%;
+    max-width: 500px;
+    margin: 0 auto;
+    padding: 2rem;
+}
+
+/* Tarjeta alien */
+.alien-card {
+    position: relative;
+    padding: 2.5rem;
+    border-radius: 16px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+    background: rgba(0, 0, 0, 0.8);
+    overflow: hidden;
+    z-index: 1;
+}
+
+.alien-card::before {
+    content: '';
+    position: absolute;
+    top: -2px; left: -2px; right: -2px; bottom: -2px;
+    background: linear-gradient(45deg, #00ff88, #ff0080, #8000ff, #00ff88);
+    z-index: -1;
+    animation: glitchBorder 3s infinite linear;
+    filter: blur(5px);
+}
+
+@keyframes glitchBorder {
+    0% { opacity: 0.8; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(1.02); }
+    100% { opacity: 0.8; transform: scale(1); }
+}
+
+/* Header */
+.glitch-header {
+    text-align: center;
+    margin-bottom: 2.5rem;
+    position: relative;
+}
+
+.glitch-title {
+    font-size: 3rem;
+    font-weight: 900;
+    color: #00ff88;
+    text-shadow: 
+        0 0 10px #00ff88,
+        0 0 20px #00ff88,
+        0 0 30px #00ff88;
+    animation: textGlitch 5s infinite;
+    margin-bottom: 0.5rem;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+}
+
+@keyframes textGlitch {
+    0%, 100% { 
+        transform: translate(0);
+        text-shadow: 
+            0 0 10px #00ff88,
+            0 0 20px #00ff88,
+            0 0 30px #00ff88;
+    }
+    25% { 
+        transform: translate(-2px, 1px);
+        text-shadow: 
+            0 0 10px #ff0080,
+            0 0 20px #ff0080,
+            2px 0 30px #8000ff;
+    }
+    75% { 
+        transform: translate(1px, -1px);
+        text-shadow: 
+            0 0 10px #8000ff,
+            0 0 20px #8000ff,
+            -2px 0 30px #00ff88;
+    }
+}
+
+.glitch-subtitle {
+    color: #ff0080;
+    font-size: 1rem;
+    text-transform: uppercase;
+    letter-spacing: 4px;
+    animation: subtitleFlicker 3s infinite;
+}
+
+@keyframes subtitleFlicker {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+}
+
+/* Estado del sistema */
+.system-status {
+    border: 1px solid #00ff88;
+    padding: 1rem;
+    margin: 1rem 0;
+    background: rgba(0, 255, 136, 0.05);
+    text-align: center;
+}
+
+.status-text {
+    color: #00ff88;
+    font-weight: bold;
+}
+
+.status-online {
+    color: #ff0080;
+}
+
+.status-details {
+    color: #8000ff;
+    font-size: 0.8rem;
+    margin-top: 0.3rem;
+}
+
+/* Selector de método */
+.cyber-selector {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.cyber-button {
+    background: rgba(0, 255, 136, 0.1);
+    border: 2px solid #00ff88;
+    border-radius: 0;
+    padding: 1.5rem 1rem;
+    color: #00ff88;
+    font-family: 'Courier New', monospace;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    transition: all 0.3s;
+    position: relative;
+    overflow: hidden;
+    cursor: pointer;
+}
+
+.cyber-button:hover {
+    background: rgba(0, 255, 136, 0.3);
+    box-shadow: 
+        0 0 20px #00ff88,
+        inset 0 0 20px rgba(0, 255, 136, 0.2);
+    transform: translateY(-3px);
+}
+
+.cyber-button::before {
+    content: '';
+    position: absolute;
+    top: 0; left: -100%;
+    width: 100%; height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(0, 255, 136, 0.4), transparent);
+    transition: left 0.5s;
+}
+
+.cyber-button:hover::before {
+    left: 100%;
+}
+
+/* Mensaje de advertencia */
+.warning-message {
+    background: rgba(255, 0, 128, 0.1);
+    border-left: 4px solid #ff0080;
+    padding: 1rem;
+    margin: 1.5rem 0;
+    color: #ff0080;
+}
+
+/* Formulario de login */
+.login-section {
+    margin: 2rem 0;
+}
+
+.form-group {
+    margin-bottom: 1.5rem;
+}
+
+.form-group label {
+    display: block;
+    color: #ff0080;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-bottom: 0.5rem;
+}
+
+.form-group input {
+    width: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    border: 2px solid #ff0080;
+    border-radius: 0;
+    padding: 1rem;
+    color: #00ff88;
+    font-family: 'Courier New', monospace;
+    font-size: 1.1rem;
+    transition: all 0.3s;
+}
+
+.form-group input:focus {
+    border-color: #8000ff;
+    box-shadow: 0 0 15px #8000ff;
+    outline: none;
+}
+
+/* Opciones del formulario */
+.form-options {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 1.5rem;
+}
+
+.remember-option {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: #00ff88;
+}
+
+.recovery-option a {
+    color: #ff0080;
+    text-decoration: none;
+}
+
+.recovery-option a:hover {
+    text-decoration: underline;
+}
+
+/* Botones */
+.primary-button {
+    width: 100%;
+    background: linear-gradient(45deg, #ff0080, #8000ff);
+    border: none;
+    border-radius: 0;
+    padding: 1.2rem;
+    color: white;
+    font-family: 'Courier New', monospace;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 3px;
+    transition: all 0.3s;
+    position: relative;
+    cursor: pointer;
+    margin-bottom: 1rem;
+}
+
+.primary-button:hover {
+    transform: skewX(-5deg);
+    box-shadow: 
+        0 0 30px #ff0080,
+        0 0 60px #8000ff;
+}
+
+.back-button {
+    width: 100%;
+    background: transparent;
+    border: 1px solid #8000ff;
+    color: #8000ff;
+    padding: 0.8rem;
+    font-family: 'Courier New', monospace;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.back-button:hover {
+    background: rgba(128, 0, 255, 0.1);
+}
+
+/* Scanner NFC */
+.alien-scanner {
+    border: 3px dashed #8000ff;
+    padding: 2.5rem 2rem;
+    text-align: center;
+    margin: 2rem 0;
+    background: rgba(128, 0, 255, 0.1);
+    animation: scannerPulse 4s infinite;
+    position: relative;
+}
+
+@keyframes scannerPulse {
+    0%, 100% { 
+        border-color: #8000ff;
+        box-shadow: 0 0 20px #8000ff;
+    }
+    50% { 
+        border-color: #00ff88;
+        box-shadow: 0 0 40px #00ff88;
+    }
+}
+
+.alien-icon {
+    font-size: 4rem;
+    animation: alienSpin 8s infinite linear;
+    filter: drop-shadow(0 0 10px #ff0080);
+}
+
+@keyframes alienSpin {
+    0% { transform: rotate(0deg) scale(1); }
+    50% { transform: rotate(180deg) scale(1.2); }
+    100% { transform: rotate(360deg) scale(1); }
+}
+
+.alien-scanner h3 {
+    color: #00ff88;
+    margin: 1rem 0 0.5rem;
+}
+
+.alien-scanner p {
+    color: #ff0080;
+    margin: 0;
+}
+
+/* Controles NFC */
+.alien-controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin: 1.5rem 0;
+}
+
+.scan-button {
+    background: rgba(0, 255, 136, 0.1);
+    border: 2px solid #00ff88;
+    color: #00ff88;
+    padding: 1rem;
+    font-family: 'Courier New', monospace;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.scan-button:hover {
+    background: rgba(0, 255, 136, 0.2);
+    box-shadow: 0 0 15px rgba(0, 255, 136, 0.5);
+}
+
+/* Estado del escaneo */
+.scan-status {
+    text-align: center;
+    margin: 1.5rem 0;
+    color: #00ff88;
+}
+
+.spinner {
+    width: 40px;
+    height: 40px;
+    border: 4px solid rgba(0, 255, 136, 0.3);
+    border-top: 4px solid #00ff88;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 1rem;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Footer */
+.cyber-footer {
+    border-top: 1px solid #8000ff;
+    padding-top: 1.5rem;
+    margin-top: 2rem;
+    text-align: center;
+    color: #8000ff;
+}
+
+.footer-brand {
+    font-weight: bold;
+    letter-spacing: 2px;
+}
+
+.footer-copyright {
+    font-size: 0.7rem;
+    opacity: 0.7;
+    margin-top: 0.3rem;
+}
+
+/* Efecto lluvia de matriz */
+.matrix-rain {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+    z-index: -1;
+}
+
+.code-char {
+    position: absolute;
+    color: #00ff88;
+    font-family: 'Courier New', monospace;
+    font-size: 14px;
+    animation: matrixFall linear infinite;
+}
+
+@keyframes matrixFall {
+    0% { 
+        transform: translateY(-100px);
+        opacity: 0;
+    }
+    5% { opacity: 1; }
+    95% { opacity: 1; }
+    100% { 
+        transform: translateY(100vh);
+        opacity: 0;
+    }
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .cyber-container {
+        max-width: 95%;
+    }
+    
+    .alien-card {
+        padding: 2rem 1.5rem;
+    }
+    
+    .glitch-title {
+        font-size: 2.2rem;
+    }
+    
+    .cyber-selector {
+        grid-template-columns: 1fr;
+    }
+    
+    .alien-controls {
+        grid-template-columns: 1fr;
+    }
+    
+    .form-options {
+        flex-direction: column;
+        gap: 1rem;
+    }
+}

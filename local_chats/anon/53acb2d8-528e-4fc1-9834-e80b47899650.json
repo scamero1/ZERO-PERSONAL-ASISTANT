@@ -1,0 +1,15 @@
+{
+  "chat_id": "53acb2d8-528e-4fc1-9834-e80b47899650",
+  "title": "hola como estas",
+  "updated_at": "2025-09-26 10:42:38",
+  "messages": [
+    {
+      "role": "user",
+      "content": "hola como estas"
+    },
+    {
+      "role": "assistant",
+      "content": "Hola, estoy funcionando correctamente. ¿En qué puedo ayudarte hoy?"
+    }
+  ]
+}
