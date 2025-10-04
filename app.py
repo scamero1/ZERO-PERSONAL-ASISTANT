@@ -121,89 +121,61 @@ def logout_route():
 def api_chat():
     if 'usuario' not in session:
         return jsonify({'error': 'No autenticado'}), 401
-    
+
     data = request.get_json() or {}
-    message = data.get('message', '').trim() if hasattr(str, 'trim') else (data.get('message', '') or '').strip()
-    if not message:
+    user_message = (data.get('message') or '').strip()
+    if not user_message:
         return jsonify({'error': 'Mensaje vacío'}), 400
     if not GROQ_API_KEY:
         return jsonify({'error': 'GROQ_API_KEY no configurada'}), 400
 
-    payload = {
-        'model': GROQ_TEXT_MODEL,
-        'messages': [{'role': 'user', 'content': message}],
-        'temperature': 0.7
-    }
-
-    try:
-        r = requests.post(
-            'https://api.groq.com/openai/v1/chat/completions',
-            headers={
-                'Authorization': f'Bearer {GROQ_API_KEY}',
-                'Content-Type': 'application/json'
-            },
-            json=payload,
-            timeout=30
-        )
-        j = r.json()
-        if r.status_code != 200:
-            return jsonify({'error': j.get('error', {}).get('message', 'Fallo en Groq')}), r.status_code
-
-        reply = j['choices'][0]['message']['content']
-        return jsonify({'reply': reply, 'chat_id': data.get('chat_id')})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-    incoming_chat_id = data.get('chat_id')
-    if not user_message:
-        return jsonify({'error': 'Mensaje vacío'}), 400
-
     # Gestionar chat_id consistente y crear si no existe
+    incoming_chat_id = data.get('chat_id')
     user_id = session.get('user_id')
     chat_id = incoming_chat_id or session.get('current_chat')
+    title = user_message[:30] + ('...' if len(user_message) > 30 else '')
+
     if not chat_id:
-        title = user_message[:30] + ('...' if len(user_message) > 30 else '')
         chat_id = db.create_chat(user_id, title)
     else:
         try:
-            title = user_message[:30] + ('...' if len(user_message) > 30 else '')
             db.update_chat_title(chat_id, title)
         except Exception:
             pass
     session['current_chat'] = chat_id
 
-    # Construir mensajes para la IA
+    # Mensajes para la IA (incluye pequeño prompt del sistema opcional)
     system_prompt = "Eres un asistente AI llamado Zero. Sé conciso, profesional y útil."
-    user_context = db.get_user_context(session.get('user_id'))
+    user_context = db.get_user_context(user_id)
     if user_context:
         context_info = "\n\nContexto personalizado del usuario:\n"
         for ctx in user_context[-5:]:
             context_info += f"- {ctx['context_key']}: {ctx['context_value'][:200]}...\n"
         system_prompt += context_info
 
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": user_message}
-    ]
-    
+    payload = {
+        "model": GROQ_TEXT_MODEL,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_message}
+        ],
+        "max_tokens": 2000,
+        "temperature": 0.7
+    }
+
     try:
-        payload = {
-            "model": GROQ_TEXT_MODEL,
-            "messages": messages,
-            "max_tokens": 2000,
-            "temperature": 0.7
-        }
         response = requests.post(API_URL, headers=BASE_HEADERS, json=payload, timeout=60)
-        if response.status_code == 200:
-            result = response.json()
-            ai_response = result['choices'][0]['message']['content']
-
-            # Guardar mensajes en DB
-            db.add_message(chat_id, "user", user_message)
-            db.add_message(chat_id, "assistant", ai_response)
-
-            return jsonify({'response': ai_response, 'chat_id': chat_id})
-        else:
+        if response.status_code != 200:
             return jsonify({'error': f'Error en la API: {response.status_code}'}), 500
+
+        result = response.json()
+        ai_response = result['choices'][0]['message']['content']
+
+        # Guardar mensajes en DB
+        db.add_message(chat_id, "user", user_message)
+        db.add_message(chat_id, "assistant", ai_response)
+
+        return jsonify({'response': ai_response, 'chat_id': chat_id})
     except Exception as e:
         return jsonify({'error': f'Error: {str(e)}'}), 500
 
@@ -412,10 +384,10 @@ def get_chats():
 def get_chat(chat_id):
     if 'usuario' not in session:
         return jsonify({'error': 'No autenticado'}), 401
-    
-    user_id = session.get('user_id')
-    messages = db.get_chat_messages(chat_id, user_id)
-    
+
+    # Corrige llamada: solo requiere chat_id
+    messages = db.get_chat_messages(chat_id)
+
     return jsonify({
         'chat_id': chat_id,
         'messages': messages

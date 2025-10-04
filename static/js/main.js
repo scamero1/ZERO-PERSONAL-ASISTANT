@@ -18,15 +18,22 @@ function showSection(section) {
 }
 
 function createMessageBubble(role, content) {
-    const wrapper = document.createElement('div');
-    wrapper.className = role === 'user' ? 'msg msg-user' : 'msg msg-assistant';
+    // Estructura tipo ChatGPT: contenedor + avatar + burbuja
+    const wrap = document.createElement('div');
+    wrap.className = 'msg ' + (role === 'user' ? 'msg--user' : 'msg--assistant');
+
+    const avatar = document.createElement('div');
+    avatar.className = 'avatar ' + (role === 'user' ? 'avatar--user' : 'avatar--assistant');
 
     const bubble = document.createElement('div');
-    bubble.className = role === 'user' ? 'bubble bubble-user' : 'bubble bubble-assistant';
+    bubble.className = 'bubble';
     bubble.textContent = content;
 
-    wrapper.appendChild(bubble);
-    return wrapper;
+    // Orden: usuario (burbuja, avatar) — asistente (avatar, burbuja)
+    wrap.appendChild(role === 'user' ? bubble : avatar);
+    wrap.appendChild(role === 'user' ? avatar : bubble);
+
+    return wrap;
 }
 
 function scrollChatToEnd() {
