@@ -1081,125 +1081,422 @@ def file_upload_page():
     """Página para subir y gestionar archivos"""
     st.title("📁 Gestión de Archivos")
     st.write("Sube documentos e imágenes para que Zero pueda usarlos en las conversaciones.")
-    
+
     # Verificar que el usuario esté autenticado
     if not st.session_state.get("usuario"):
         st.error("❌ Error de sesión. Por favor, vuelve a iniciar sesión.")
         return
-    
+
     # Obtener user_id desde la base de datos usando el username
     username = st.session_state.usuario
     user_id = db.get_user_id_by_username(username)
-    
+
     if not user_id:
         st.error("❌ No se pudo obtener la información del usuario.")
         return
-    
+
     # Sección de subida de archivos
     st.subheader("📤 Subir Nuevo Archivo")
-    
+
     uploaded_file = st.file_uploader(
         "Elige un archivo",
         type=["pdf", "docx", "doc", "txt", "xlsx", "xls", "csv", "jpg", "jpeg", "png", "gif", "bmp", "webp"],
         help="Formatos soportados: PDF, Word, Excel, TXT, CSV e imágenes"
     )
-    
+
     if uploaded_file is not None:
-        # Mostrar información del archivo (sin HTML peligroso)
         st.info(f"📄 {uploaded_file.name} ({uploaded_file.size / 1024:.1f} KB)")
-        
         if st.button("🚀 Procesar Archivo", type="primary"):
             with st.spinner("Procesando archivo..."):
                 # Guardar y procesar archivo
-                file_id, error = save_uploaded_file(uploaded_file, user_id)
-                
+                file_id, error = save_uploaded_file(uploaded_file)
                 if error:
                     st.error(f"❌ Error al procesar archivo: {error}")
                 else:
                     st.success("✅ Archivo procesado y guardado exitosamente")
-                    
                     # Si es una imagen, realizar análisis con Groq Vision
                     if uploaded_file.type.startswith('image/'):
                         with st.spinner("Analizando imagen con Groq Vision..."):
                             image_base64 = b64encode(uploaded_file.getvalue()).decode('utf-8')
                             analysis = analyze_image_with_groq(image_base64, uploaded_file.name)
-                            
-                            # Guardar análisis
                             db.save_image_analysis(
                                 user_id=user_id,
-                                image_path=f"uploads/{user_id}/{uploaded_file.name}",
+                                image_path=f"user_uploads/{user_id}/{uploaded_file.name}",
                                 analysis_result=analysis,
                                 model_used=GROQ_VISION_MODEL,
                                 archivo_id=file_id
                             )
-                            
-                            # Agregar análisis al contexto
                             context_key = f"Análisis de imagen: {uploaded_file.name}"
                             db.save_user_context(user_id, context_key, analysis, file_id)
-                            
                             st.success("🖼️ Imagen analizada con Groq Vision")
-                    
                     # Actualizar archivos y contexto en sesión
                     st.session_state.user_files = db.get_user_files(user_id)
                     st.session_state.user_context = db.get_user_context(user_id)
-                    
                     st.rerun()
-    
+
     # Sección de archivos existentes
     st.subheader("📋 Archivos Subidos")
-    
-    # Cargar archivos del usuario si no están en sesión
+
     if "user_files" not in st.session_state:
         st.session_state.user_files = db.get_user_files(user_id)
-    
+
     if st.session_state.get("user_files"):
         for file_data in st.session_state.user_files:
             with st.expander(f"📄 {file_data['filename']}"):
                 col1, col2 = st.columns([3, 1])
-                
                 with col1:
                     st.write(f"**Tipo:** {file_data['file_type'].upper()}")
                     st.write(f"**Tamaño:** {file_data['file_size'] / 1024:.1f} KB")
                     st.write(f"**Subido:** {file_data['uploaded_at']}")
-                    
                     if file_data.get('analysis_summary'):
                         st.write(f"**Resumen:** {file_data['analysis_summary'][:200]}...")
-                
                 with col2:
                     if st.button(f"🗑️ Eliminar", key=f"delete_{file_data['id']}"):
-                        # Eliminar archivo físico
                         try:
                             if os.path.exists(file_data['file_path']):
                                 os.remove(file_data['file_path'])
                         except Exception:
                             pass
-                        
-                        # Eliminar de base de datos
                         db.delete_file(file_data['id'], user_id)
-                        
-                        # Actualizar sesión
                         st.session_state.user_files = db.get_user_files(user_id)
                         st.session_state.user_context = db.get_user_context(user_id)
-                        
                         st.success("🗑️ Archivo eliminado")
                         st.rerun()
-                    
                     if st.button(f"💬 Usar en Chat", key=f"use_{file_data['id']}"):
                         if file_data.get('content_extracted'):
-                            # Agregar contenido al chat actual
-                            content_message = f"📄 **Contenido de {file_data['filename']}:**\n\n{file_data['content_extracted'][:1000]}..."
+                            content_message = f"📄 **Contenido de {file_data['filename']}**:\n\n{file_data['content_extracted'][:1000]}..."
                             st.session_state.messages.append({
-                                "role": "user", 
+                                "role": "user",
                                 "content": content_message
                             })
-                            
-                            # Cambiar a página de chat
-                            st.session_state.menu_option = "Chat Principal"
+                            # Cambiar a página de chat de forma segura
+                            st.session_state.current_page = "chat"
                             st.success(f"📄 Contenido de {file_data['filename']} agregado al chat")
                             st.rerun()
     else:
         st.info("📭 No tienes archivos subidos aún. ¡Sube tu primer archivo!")
         
+# --- EXPORTAR DISEÑO A HTML/CSS ---
+def export_streamlit_design_to_html_css():
+    """
+    Exporta el diseño visual de la app Streamlit a HTML y CSS para usarlo en una web estática.
+    Solo exporta la estructura principal, sidebar, chat y archivos.
+    """
+    # HTML principal
+    html = """
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>ZERO - AI Assistant</title>
+    <link rel="icon" href="favicon.ico" type="image/x-icon">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        /* --- Copia el CSS de Streamlit aquí --- */
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+        :root {
+            --primary-bg: #0a0a0a;
+            --secondary-bg: #111111;
+            --sidebar-bg: #1a1a1a;
+            --card-bg: #222222;
+            --accent-primary: #8b5cf6;
+            --accent-secondary: #a78bfa;
+            --accent-gradient: linear-gradient(135deg, #8b5cf6 0%, #a78bfa 100%);
+            --text-primary: #ffffff;
+            --text-secondary: #e2e8f0;
+            --text-muted: #94a3b8;
+            --border-color: #2d3748;
+            --border-light: #374151;
+            --user-msg-bg: #1e293b;
+            --assistant-msg-bg: #1a1a1a;
+            --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.4);
+            --shadow-md: 0 8px 25px rgba(0, 0, 0, 0.5);
+            --shadow-lg: 0 15px 40px rgba(0, 0, 0, 0.6);
+            --success: #10b981;
+            --warning: #f59e0b;
+            --error: #ef4444;
+        }
+        body {
+            background: var(--primary-bg);
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            margin: 0;
+            color: var(--text-primary);
+        }
+        .sidebar {
+            background: var(--sidebar-bg);
+            width: 320px;
+            min-height: 100vh;
+            float: left;
+            border-right: 1px solid var(--border-color);
+            padding: 2rem 1.5rem 1.5rem 1.5rem;
+        }
+        .sidebar-title {
+            font-size: 1.5rem;
+            font-weight: 800;
+            color: var(--accent-primary);
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        .user-info {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            font-weight: 500;
+            margin-bottom: 2rem;
+        }
+        .sidebar-section {
+            margin-bottom: 2rem;
+        }
+        .section-title {
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: var(--accent-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .chat-list, .file-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        .chat-item, .file-item {
+            padding: 1rem;
+            border-radius: 12px;
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 0.875rem;
+        }
+        .chat-item:hover, .file-item:hover {
+            background: rgba(139, 92, 246, 0.1);
+            border-color: var(--accent-primary);
+            transform: translateX(5px);
+        }
+        .chat-title, .file-name {
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 0.25rem;
+        }
+        .chat-preview, .file-info {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .main-content {
+            margin-left: 320px;
+            padding: 2rem;
+            background: var(--primary-bg);
+            min-height: 100vh;
+        }
+        .main-header {
+            background: var(--secondary-bg);
+            padding: 1.5rem 2rem;
+            border-bottom: 1px solid var(--border-color);
+            margin-bottom: 2rem;
+        }
+        .chat-container {
+            background: var(--primary-bg);
+            min-height: 60vh;
+            padding: 0;
+        }
+        .message {
+            padding: 1.5rem 2rem;
+            animation: slideIn 0.4s ease;
+        }
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(20px);}
+            to { opacity: 1; transform: translateY(0);}
+        }
+        .user-message {
+            background: var(--user-msg-bg);
+            border-left: 4px solid var(--accent-primary);
+        }
+        .assistant-message {
+            background: var(--assistant-msg-bg);
+            border-left: 4px solid var(--accent-secondary);
+        }
+        .message-content {
+            max-width: 800px;
+            margin: 0 auto;
+            display: flex;
+            gap: 1rem;
+            align-items: flex-start;
+        }
+        .message-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            flex-shrink: 0;
+            font-size: 1rem;
+            background: var(--accent-gradient);
+            color: white;
+        }
+        .assistant-avatar {
+            background: var(--card-bg);
+            border: 2px solid var(--accent-primary);
+        }
+        .message-text {
+            flex: 1;
+            line-height: 1.6;
+            font-size: 0.95rem;
+            color: var(--text-primary);
+            padding: 0.5rem 0;
+        }
+        .upload-section {
+            background: var(--card-bg);
+            border: 2px dashed var(--border-color);
+            border-radius: 20px;
+            padding: 3rem;
+            text-align: center;
+            margin-bottom: 2rem;
+            transition: all 0.3s ease;
+        }
+        .upload-section:hover {
+            border-color: var(--accent-primary);
+            background: rgba(139, 92, 246, 0.05);
+        }
+        .file-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        .file-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: var(--accent-gradient);
+        }
+        .file-card:hover {
+            border-color: var(--accent-primary);
+            transform: translateY(-5px);
+            box-shadow: var(--shadow-lg);
+        }
+        /* Scrollbar personalizada */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: var(--secondary-bg);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: var(--accent-gradient);
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--accent-secondary);
+        }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <div class="sidebar-title">⚡ ZERO</div>
+        <div class="user-info">Hola, Usuario</div>
+        <div class="sidebar-section">
+            <div class="section-title">Conversaciones</div>
+            <div class="chat-list">
+                <div class="chat-item">
+                    <div class="chat-title">Chat de ejemplo</div>
+                    <div class="chat-preview">Último mensaje del chat...</div>
+                </div>
+                <!-- ...más chats... -->
+            </div>
+        </div>
+        <div class="sidebar-section">
+            <div class="section-title">Archivos</div>
+            <div class="file-list">
+                <div class="file-item">
+                    <div class="file-name">📄 archivo.pdf</div>
+                    <div class="file-info">PDF • 120 KB</div>
+                </div>
+                <!-- ...más archivos... -->
+            </div>
+        </div>
+        <div class="sidebar-section">
+            <div class="section-title">Navegación</div>
+            <button class="chat-item">Chat con Zero</button>
+            <button class="chat-item">Gestor de Archivos</button>
+            <button class="chat-item">Panel Admin</button>
+        </div>
+    </div>
+    <div class="main-content">
+        <div class="main-header">
+            <div style="display: flex; align-items: center; gap: 1rem;">
+                <div style="font-size: 2rem;">⚡</div>
+                <div>
+                    <h1 style="margin: 0; color: var(--text-primary); font-weight: 800;">
+                        ZERO AI
+                    </h1>
+                    <p style="margin: 0; color: var(--text-secondary); font-size: 0.9rem;">
+                        Tu asistente de IA avanzado
+                    </p>
+                </div>
+            </div>
+        </div>
+        <div class="chat-container">
+            <div class="message user-message">
+                <div class="message-content">
+                    <div class="message-avatar">👤</div>
+                    <div class="message-text">Hola, ¿en qué puedo ayudarte?</div>
+                </div>
+            </div>
+            <div class="message assistant-message">
+                <div class="message-content">
+                    <div class="message-avatar assistant-avatar">⚡</div>
+                    <div class="message-text">¡Bienvenido a ZERO!</div>
+                </div>
+            </div>
+            <!-- ...más mensajes... -->
+        </div>
+        <div class="upload-section">
+            <div style="font-size: 4rem; margin-bottom: 1rem;">📤</div>
+            <h3 style="margin: 0 0 1rem 0; color: var(--text-primary); font-weight: 700;">Subir Archivos</h3>
+            <p style="margin: 0 0 2rem 0; color: var(--text-secondary); font-size: 1rem;">
+                Arrastra o selecciona archivos para que Zero los analice automáticamente
+            </p>
+            <!-- Aquí iría el input de archivos en una web real -->
+        </div>
+        <div class="file-card">
+            <div class="file-header">
+                <div class="file-details">
+                    <div class="file-name">📄 archivo.pdf</div>
+                    <div class="file-meta">
+                        PDF • 120 KB • 2024-06-01
+                    </div>
+                </div>
+            </div>
+            <div class="file-info">Resumen: ...</div>
+        </div>
+        <!-- ...más archivos... -->
+    </div>
+</body>
+</html>
+    """
+    return html
+
+# Puedes guardar el HTML en un archivo si lo deseas:
+# with open("zero_export.html", "w", encoding="utf-8") as f:
+#     f.write(export_streamlit_design_to_html_css())
+
 # --- FUNCIÓN PRINCIPAL ---
 def main():
     """Aplicación principal"""

@@ -32,5 +32,5 @@
 ::
 ::978f952a14a936cc963da21a135fa983
 @echo off
-start "" "C:\Users\Camero\AppData\Local\Programs\Python\Python313\pythonw.exe" Launcher.pyw
+C:\Users\Camero\AppData\Local\Programs\Python\Python313\python.exe app.py
 exit

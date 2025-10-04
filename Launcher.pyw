@@ -14,20 +14,14 @@ except Exception as e:
     exit()
 
 # Rutas
-cloudflared_path = os.path.expanduser(r"C:\Program Files (x86)\cloudflared\cloudflared.exe")
-streamlit_path = "streamlit"
-script_path = "zero.py"
+flask_app_path = "app.py"
+python_path = r"C:\Users\Camero\AppData\Local\Programs\Python\Python313\python.exe"
 
 # Bandera para ocultar consola en Windows
 CREATE_NO_WINDOW = 0x08000000
 
-# Ejecuta los procesos SIN ventana visible
-subprocess.Popen([cloudflared_path, "tunnel", "run", "zero"],
-                 stdout=subprocess.DEVNULL,
-                 stderr=subprocess.DEVNULL,
-                 creationflags=CREATE_NO_WINDOW)
-
-subprocess.Popen([streamlit_path, "run", script_path],
+# Ejecuta el proceso Flask SIN ventana visible
+flask_process = subprocess.Popen([python_path, flask_app_path],
                  stdout=subprocess.DEVNULL,
                  stderr=subprocess.DEVNULL,
                  creationflags=CREATE_NO_WINDOW)
@@ -35,14 +29,14 @@ subprocess.Popen([streamlit_path, "run", script_path],
 # Notificación
 notification.notify(
     title="ZERO Servidor",
-    message="✅ Servidor iniciado automáticamente.",
+    message="✅ Servidor iniciado automáticamente en http://localhost:8000",
     timeout=5
 )
 
 # Interfaz solo para apagar
 def detener_servidor():
-    os.system("taskkill /f /im streamlit.exe >nul 2>&1")
-    os.system("taskkill /f /im cloudflared.exe >nul 2>&1")
+    if flask_process.poll() is None:  # Si el proceso sigue en ejecución
+        flask_process.terminate()
     notification.notify(
         title="ZERO Servidor",
         message="🛑 Servidor detenido.",

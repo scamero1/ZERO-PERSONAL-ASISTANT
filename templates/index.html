@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZERO - AI Assistant</title>
+    <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+</head>
+<body>
+    <div class="chat-app">
+      <header class="app-header">
+        <div class="brand">
+          <div class="logo-dot"></div>
+          <span class="gradient-text">Chat con IA</span>
+        </div>
+        <div class="status">
+          <span class="status-dot" id="status-dot"></span>
+          <span id="status-text">Comprobando IA…</span>
+        </div>
+      </header>
+
+      <main id="chat-thread" class="chat-thread" aria-live="polite" aria-label="Conversación con IA">
+        <!-- Mensajes se renderizan aquí -->
+      </main>
+
+      <footer class="composer">
+        <button id="new-chat" class="btn ghost" title="Inicia una nueva conversación">Nueva charla</button>
+        <div class="composer-box">
+          <textarea id="composer-input" class="input" rows="1" placeholder="Escribe tu mensaje... (Enter para enviar, Shift+Enter para salto de línea)"></textarea>
+          <button id="composer-send" class="btn primary">Enviar</button>
+        </div>
+      </footer>
+    </div>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">⚡</div>
+                <h2>ZERO</h2>
+            </div>
+            
+            <nav class="sidebar-nav">
+                <button class="new-chat-btn">+ Nuevo Chat</button>
+                
+                <div class="nav-section">
+                    <h3>Chats Recientes</h3>
+                    <ul class="chat-list" id="chat-list">
+                        <!-- Los chats se cargarán dinámicamente -->
+                    </ul>
+                </div>
+                
+                <div class="nav-section">
+                    <h3>Herramientas</h3>
+                    <ul class="tools-list">
+                        <li><a href="#" class="tool-link" data-tool="chat">💬 Chat</a></li>
+                        <li><a href="#" class="tool-link" data-tool="files">📁 Archivos</a></li>
+                        <li><a href="#" class="tool-link" data-tool="images">🖼️ Imágenes</a></li>
+                    </ul>
+                </div>
+            </nav>
+            
+            <div class="sidebar-footer">
+                <div class="user-info">
+                    <div class="user-avatar">👤</div>
+                    <div class="user-details">
+                        <div class="user-name">{{ usuario }}</div>
+                        <div class="user-role">{{ rol }}</div>
+                    </div>
+                </div>
+                <a href="/logout" class="logout-btn">Cerrar Sesión</a>
+            </div>
+        </aside>
+        
+        <!-- Contenido principal -->
+        <main class="main-content">
+            <!-- dentro de la sección de chat -->
+            <section class="chat-section" id="chat-section">
+                <div class="chat-header">
+                    <h1>Chat con IA</h1>
+                    {% if groq_enabled|default(false) %}
+                        <span class="status-badge connected">Conectado a IA</span>
+                    {% else %}
+                        <span class="status-badge disconnected">IA no configurada</span>
+                    {% endif %}
+                </div>
+                <noscript>
+                    <div class="noscript-warning">Activa JavaScript para usar el chat.</div>
+                </noscript>
+
+                <div class="chat-container" id="chat-container">
+                    <!-- Mensaje de bienvenida -->
+                    <div class="welcome-message">
+                        <div class="welcome-icon">⚡</div>
+                        <h2>Bienvenido a ZERO</h2>
+                        <p>Asistente de IA avanzado con capacidades de análisis de documentos,<br>
+                        procesamiento de imágenes y soporte para ecuaciones matemáticas.</p>
+                        
+                        <div class="feature-cards">
+                            <div class="feature-card">
+                                <div class="feature-icon">💬</div>
+                                <div class="feature-title">Chat Inteligente</div>
+                                <div class="feature-desc">Conversaciones naturales y contextuales</div>
+                            </div>
+                            <div class="feature-card">
+                                <div class="feature-icon">📁</div>
+                                <div class="feature-title">Análisis de Archivos</div>
+                                <div class="feature-desc">Procesa documentos e imágenes</div>
+                            </div>
+                            <div class="feature-card">
+                                <div class="feature-icon">🧮</div>
+                                <div class="feature-title">Soporte Matemático</div>
+                                <div class="feature-desc">Ecuaciones y análisis avanzado</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Los mensajes del chat se cargarán aquí -->
+                </div>
+                
+                <div class="chat-input-container">
+                    <form id="chat-form">
+                        <div class="chat-input-wrapper">
+                            <textarea id="chat-input" placeholder="Escribe un mensaje..." rows="1"></textarea>
+                            <button type="button" id="upload-btn" class="upload-btn">📎</button>
+                            <input type="file" id="file-upload" style="display: none;">
+                        </div>
+                        <button type="submit" id="send-btn" class="send-btn">📤</button>
+                    </form>
+                </div>
+            </section>
+            
+            <!-- Sección de archivos -->
+            <section class="files-section" id="files-section" style="display: none;">
+                <h2>Mis Archivos</h2>
+                
+                <div class="upload-area">
+                    <div class="upload-icon">📤</div>
+                    <h3>Subir Archivos</h3>
+                    <p>Arrastra y suelta archivos o haz clic para seleccionar</p>
+                    <input type="file" id="file-upload-area" class="file-upload-input">
+                    <button class="upload-btn-large">Seleccionar Archivo</button>
+                </div>
+                
+                <div class="files-list" id="files-list">
+                    <!-- Los archivos se cargarán dinámicamente -->
+                </div>
+            </section>
+            
+            <!-- Sección de imágenes -->
+            <section class="images-section" id="images-section" style="display: none;">
+                <h2>Análisis de Imágenes</h2>
+                
+                <div class="upload-area">
+                    <div class="upload-icon">🖼️</div>
+                    <h3>Subir Imagen</h3>
+                    <p>Arrastra y suelta una imagen o haz clic para seleccionar</p>
+                    <input type="file" id="image-upload" class="file-upload-input" accept="image/*">
+                    <button class="upload-btn-large">Seleccionar Imagen</button>
+                </div>
+                
+                <div class="image-preview-container" id="image-preview-container" style="display: none;">
+                    <div class="image-preview">
+                        <img id="preview-image" src="" alt="Vista previa">
+                    </div>
+                    <button id="analyze-image-btn" class="analyze-btn">🔍 Analizar Imagen</button>
+                </div>
+                
+                <div class="analysis-result" id="analysis-result" style="display: none;">
+                    <h3>📋 Análisis de la Imagen</h3>
+                    <div id="analysis-content" class="analysis-content"></div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- al final del body, antes de main.js -->
+    <script>
+      // Estado desde backend (si no viene, default false)
+      window.__groq_enabled = {{ groq_enabled|default(false) | tojson }};
+
+      (function(){
+        const threadEl = document.getElementById('chat-thread');
+        const inputEl = document.getElementById('composer-input');
+        const sendBtn = document.getElementById('composer-send');
+        const newChatBtn = document.getElementById('new-chat');
+        const statusDot = document.getElementById('status-dot');
+        const statusText = document.getElementById('status-text');
+
+        // Estado IA
+        if (window.__groq_enabled) {
+          statusDot.classList.add('on');
+          statusText.textContent = 'Conectado';
+        } else {
+          statusDot.classList.remove('on');
+          statusText.textContent = 'IA no configurada';
+        }
+
+        // Persistencia de chat
+        let chatId = localStorage.getItem('chat_id') || null;
+
+        // Auto-resize del textarea
+        function autosize(el){
+          el.style.height = 'auto';
+          el.style.height = Math.min(el.scrollHeight, 180) + 'px';
+        }
+        inputEl.addEventListener('input', ()=>autosize(inputEl));
+        autosize(inputEl);
+
+        // Helpers de UI
+        function addBubble(role, content){
+          const wrap = document.createElement('div');
+          wrap.className = 'msg ' + (role === 'user' ? 'msg--user' : 'msg--assistant');
+
+          const avatar = document.createElement('div');
+          avatar.className = 'avatar ' + (role === 'user' ? 'avatar--user' : 'avatar--assistant');
+
+          const bubble = document.createElement('div');
+          bubble.className = 'bubble';
+          bubble.textContent = content;
+
+          wrap.appendChild(role === 'user' ? bubble : avatar);
+          wrap.appendChild(role === 'user' ? avatar : bubble);
+
+          threadEl.appendChild(wrap);
+          threadEl.scrollTop = threadEl.scrollHeight;
+          return wrap;
+        }
+
+        function addThinking(){
+          const wrap = document.createElement('div');
+          wrap.className = 'msg msg--assistant';
+          const avatar = document.createElement('div');
+          avatar.className = 'avatar avatar--assistant';
+          const bubble = document.createElement('div');
+          bubble.className = 'bubble thinking';
+          bubble.innerHTML = '<span class="dot"></span><span class="dot"></span><span class="dot"></span>';
+          wrap.appendChild(avatar);
+          wrap.appendChild(bubble);
+          threadEl.appendChild(wrap);
+          threadEl.scrollTop = threadEl.scrollHeight;
+          return wrap;
+        }
+
+        function replaceThinking(thinkingEl, content){
+          const bubble = thinkingEl.querySelector('.bubble');
+          bubble.classList.remove('thinking');
+          bubble.textContent = content || 'Sin respuesta del modelo.';
+        }
+
+        async function sendMessage(){
+          const text = inputEl.value.trim();
+          if(!text) return;
+          addBubble('user', text);
+          inputEl.value = '';
+          autosize(inputEl);
+          sendBtn.disabled = true;
+
+          const thinking = addThinking();
+
+          try {
+            const res = await fetch('/api/chat', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ message: text, chat_id: chatId })
+            });
+            let data = {};
+            try { data = await res.json(); } catch(_){}
+
+            if (!res.ok){
+              const err = data?.error || `Error HTTP ${res.status}`;
+              replaceThinking(thinking, err);
+            } else {
+              chatId = data.chat_id || chatId;
+              if (chatId) localStorage.setItem('chat_id', chatId);
+              replaceThinking(thinking, data.reply);
+            }
+          } catch (e) {
+            replaceThinking(thinking, 'Error de red: ' + e.message);
+          } finally {
+            sendBtn.disabled = false;
+          }
+        }
+
+        // Nueva charla
+        newChatBtn.addEventListener('click', ()=>{
+          chatId = null;
+          localStorage.removeItem('chat_id');
+          threadEl.innerHTML = '';
+          addBubble('assistant', 'Nueva conversación iniciada. ¿En qué te ayudo?');
+        });
+
+        // Enviar
+        sendBtn.addEventListener('click', sendMessage);
+        inputEl.addEventListener('keydown', (e)=>{
+          if (e.key === 'Enter' && !e.shiftKey){
+            e.preventDefault();
+            sendMessage();
+          }
+        });
+
+        // Mensaje inicial
+        addBubble('assistant', 'Hola, soy tu IA. ¿En qué te ayudo hoy?');
+      })();
+    </script>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>
