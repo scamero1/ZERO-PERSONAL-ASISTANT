@@ -1,7 +1,7 @@
 FROM python:3.11-slim
 WORKDIR /app
 COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt && pip install streamlit
+RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt && pip install streamlit
 COPY . .
 ENV PYTHONUNBUFFERED=1
 CMD ["streamlit", "run", "Zero.py", "--server.port", "8501", "--server.address", "0.0.0.0", "--server.baseUrlPath", "/app", "--server.headless", "true"]
