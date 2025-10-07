@@ -30,6 +30,9 @@ db = ZeroDatabase()
 # Load environment variables
 load_dotenv()
 
+# Email por defecto para PQRS (puede sobrescribirse con la variable de entorno PQRS_EMAIL)
+PQRS_DEFAULT_EMAIL = os.getenv("PQRS_EMAIL", "soporte@zero-va.com")
+
 # Get API key from environment
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 if not GROQ_API_KEY:
