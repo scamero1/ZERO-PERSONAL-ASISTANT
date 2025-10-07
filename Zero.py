@@ -584,47 +584,80 @@ def create_sidebar():
                 </div>
             </div>
         """, unsafe_allow_html=True)
-        
+
+        # --- NUEVO: Selección múltiple de conversaciones ---
+        if "selected_chats" not in st.session_state:
+            st.session_state.selected_chats = set()
+
+        # Botón para eliminar conversaciones seleccionadas
+        if st.session_state.selected_chats:
+            col_del, col_count = st.columns([1, 3])
+            with col_del:
+                if st.button("🗑️ Eliminar seleccionadas", key="delete_selected_chats", use_container_width=True):
+                    for chat_id in list(st.session_state.selected_chats):
+                        db.delete_chat(chat_id, st.session_state.user_id)
+                        st.session_state.selected_chats.remove(chat_id)
+                    st.session_state.chat_history = {}
+                    st.session_state.messages = []
+                    st.success("Conversaciones eliminadas")
+                    st.rerun()
+            with col_count:
+                st.markdown(f"<span style='color:var(--text-muted);font-size:0.9rem;'>({len(st.session_state.selected_chats)} seleccionadas)</span>", unsafe_allow_html=True)
+
         # Botón nuevo chat morado
         if st.button("Nuevo Chat", key="new_chat_btn", use_container_width=True, type="primary"):
             save_current_chat()
             st.session_state.current_chat = str(uuid.uuid4())
             st.session_state.messages = []
             st.rerun()
-        
+
         # Sección de chats anteriores
         st.markdown('<div class="sidebar-section">', unsafe_allow_html=True)
         st.markdown('<div class="section-title">Conversaciones</div>', unsafe_allow_html=True)
-        
+
         if st.session_state.get("user_id"):
             try:
                 user_chats = db.get_user_chats(st.session_state.user_id)
                 if user_chats:
                     user_chats.sort(key=lambda x: x.get('created_at', ''), reverse=True)
-                    
                     for chat in user_chats[:8]:
                         is_active = chat['id'] == st.session_state.current_chat
                         title_val = chat.get('title') or "Nuevo chat"
                         preview = title_val[:25] + "..." if len(title_val) > 25 else title_val
-                        
-                        if st.button(
-                            preview,
-                            key=f"chat_{chat['id']}",
-                            use_container_width=True,
-                            type="primary" if is_active else "secondary"
-                        ):
-                            st.session_state.current_chat = chat['id']
-                            chat_messages = db.get_chat_messages(chat['id'])
-                            st.session_state.messages = [
-                                {"role": msg['role'], "content": msg['content']}
-                                for msg in chat_messages
-                            ]
-                            st.rerun()
+
+                        # Checkbox para seleccionar
+                        col1, col2 = st.columns([1, 8])
+                        with col1:
+                            checked = chat['id'] in st.session_state.selected_chats
+                            select = st.checkbox(
+                                "",
+                                value=checked,
+                                key=f"select_chat_{chat['id']}",
+                                label_visibility="collapsed"
+                            )
+                            if select:
+                                st.session_state.selected_chats.add(chat['id'])
+                            else:
+                                st.session_state.selected_chats.discard(chat['id'])
+                        with col2:
+                            if st.button(
+                                preview,
+                                key=f"chat_{chat['id']}",
+                                use_container_width=True,
+                                type="primary" if is_active else "secondary"
+                            ):
+                                st.session_state.current_chat = chat['id']
+                                chat_messages = db.get_chat_messages(chat['id'])
+                                st.session_state.messages = [
+                                    {"role": msg['role'], "content": msg['content']}
+                                    for msg in chat_messages
+                                ]
+                                st.rerun()
                 else:
                     st.info("Inicia tu primera conversación")
             except Exception as e:
                 st.error("Error cargando conversaciones")
-        
+
         st.markdown('</div>', unsafe_allow_html=True)
         
         # Sección de archivos
