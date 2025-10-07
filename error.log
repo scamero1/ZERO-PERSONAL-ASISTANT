@@ -320,3 +320,37 @@
 2025-10-07 00:11:52,033 INFO 127.0.0.1 - - [07/Oct/2025 00:11:52] "[32mGET / HTTP/1.1[0m" 302 -
 2025-10-07 00:15:40,534 INFO 127.0.0.1 - - [07/Oct/2025 00:15:40] "GET /login HTTP/1.1" 200 -
 2025-10-07 00:16:20,229 INFO 127.0.0.1 - - [07/Oct/2025 00:16:20] "[33mGET /.well-known/hostinger-challenge/yvYnjSDff3 HTTP/1.1[0m" 404 -
+2025-10-07 00:16:31,860 INFO 127.0.0.1 - - [07/Oct/2025 00:16:31] "GET /login HTTP/1.1" 200 -
+2025-10-07 00:16:32,519 INFO 127.0.0.1 - - [07/Oct/2025 00:16:32] "GET /login HTTP/1.1" 200 -
+2025-10-07 00:16:32,908 INFO 127.0.0.1 - - [07/Oct/2025 00:16:32] "GET /login HTTP/1.1" 200 -
+2025-10-07 00:16:55,557 INFO  * Detected change in 'C:\\Users\\Camero\\Downloads\\ZERO\\Zero.py', reloading
+2025-10-07 00:16:55,569 INFO  * Detected change in 'C:\\Users\\Camero\\Downloads\\ZERO\\Zero.py', reloading
+2025-10-07 00:16:55,570 INFO  * Detected change in 'C:\\Users\\Camero\\Downloads\\ZERO\\Zero.py', reloading
+2025-10-07 00:16:59,719 WARNING  * Debugger is active!
+2025-10-07 00:16:59,724 INFO  * Debugger PIN: 121-816-919
+2025-10-07 00:17:25,302 INFO 127.0.0.1 - - [07/Oct/2025 00:17:25] "[32mGET /logout HTTP/1.1[0m" 302 -
+2025-10-07 00:17:25,449 INFO 127.0.0.1 - - [07/Oct/2025 00:17:25] "[32mGET / HTTP/1.1[0m" 302 -
+2025-10-07 00:17:25,647 INFO 127.0.0.1 - - [07/Oct/2025 00:17:25] "GET /login HTTP/1.1" 200 -
+2025-10-07 00:17:26,882 INFO 127.0.0.1 - - [07/Oct/2025 00:17:26] "[32mGET / HTTP/1.1[0m" 302 -
+2025-10-07 00:17:27,424 INFO 127.0.0.1 - - [07/Oct/2025 00:17:27] "GET /login HTTP/1.1" 200 -
+2025-10-07 00:17:54,474 INFO 127.0.0.1 - - [07/Oct/2025 00:17:54] "GET /login HTTP/1.1" 200 -
+2025-10-07 00:19:19,910 INFO 127.0.0.1 - - [07/Oct/2025 00:19:19] "[32mGET / HTTP/1.1[0m" 302 -
+2025-10-07 00:19:20,351 INFO 127.0.0.1 - - [07/Oct/2025 00:19:20] "GET /login HTTP/1.1" 200 -
+2025-10-07 00:25:02,125 INFO 127.0.0.1 - - [07/Oct/2025 00:25:02] "GET /login HTTP/1.1" 200 -
+2025-10-07 00:26:15,245 INFO 127.0.0.1 - - [07/Oct/2025 00:26:15] "GET /login HTTP/1.1" 200 -
+2025-10-07 00:27:13,081 INFO 127.0.0.1 - - [07/Oct/2025 00:27:13] "GET /login HTTP/1.1" 200 -
+2025-10-07 00:29:30,554 INFO  * Detected change in 'C:\\Users\\Camero\\Downloads\\ZERO\\Zero.py', reloading
+2025-10-07 00:29:30,569 INFO  * Detected change in 'C:\\Users\\Camero\\Downloads\\ZERO\\Zero.py', reloading
+2025-10-07 00:29:30,569 INFO  * Detected change in 'C:\\Users\\Camero\\Downloads\\ZERO\\Zero.py', reloading
+2025-10-07 00:29:30,570 INFO  * Detected change in 'C:\\Users\\Camero\\Downloads\\ZERO\\Zero.py', reloading
+2025-10-07 00:29:33,917 WARNING  * Debugger is active!
+2025-10-07 00:29:33,922 INFO  * Debugger PIN: 121-816-919
+2025-10-07 00:29:52,806 INFO 127.0.0.1 - - [07/Oct/2025 00:29:52] "GET /login HTTP/1.1" 200 -
+2025-10-07 00:30:01,137 INFO 127.0.0.1 - - [07/Oct/2025 00:30:01] "[32mPOST /login HTTP/1.1[0m" 302 -
+2025-10-07 00:30:01,321 INFO 127.0.0.1 - - [07/Oct/2025 00:30:01] "[32mGET / HTTP/1.1[0m" 302 -
+2025-10-07 00:30:26,527 INFO 127.0.0.1 - - [07/Oct/2025 00:30:26] "[32mGET /logout HTTP/1.1[0m" 302 -
+2025-10-07 00:30:26,672 INFO 127.0.0.1 - - [07/Oct/2025 00:30:26] "[32mGET / HTTP/1.1[0m" 302 -
+2025-10-07 00:30:26,818 INFO 127.0.0.1 - - [07/Oct/2025 00:30:26] "GET /login HTTP/1.1" 200 -
+2025-10-07 10:59:31,735 INFO Serving on http://0.0.0.0:8000
+2025-10-07 11:00:22,565 INFO Serving on http://127.0.0.1:8000
+2025-10-07 11:01:32,931 INFO Serving on http://0.0.0.0:8000
