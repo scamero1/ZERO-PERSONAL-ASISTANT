@@ -1,2 +1,60 @@
 2025-10-06 22:43:39,891 WARNING  * Debugger is active!
 2025-10-06 22:43:39,896 INFO  * Debugger PIN: 121-816-919
+2025-10-06 22:45:58,880 INFO 127.0.0.1 - - [06/Oct/2025 22:45:58] "[32mGET / HTTP/1.1[0m" 302 -
+2025-10-06 22:46:00,290 INFO 127.0.0.1 - - [06/Oct/2025 22:46:00] "GET /login HTTP/1.1" 200 -
+2025-10-06 22:46:00,471 INFO 127.0.0.1 - - [06/Oct/2025 22:46:00] "[33mGET /logozero.jpg HTTP/1.1[0m" 404 -
+2025-10-06 22:46:00,477 INFO 127.0.0.1 - - [06/Oct/2025 22:46:00] "[36mGET /newlogin/styles.css HTTP/1.1[0m" 304 -
+2025-10-06 22:46:00,863 INFO 127.0.0.1 - - [06/Oct/2025 22:46:00] "[36mGET /favicon.ico HTTP/1.1[0m" 304 -
+2025-10-06 22:46:14,504 INFO 127.0.0.1 - - [06/Oct/2025 22:46:14] "[32mPOST /login HTTP/1.1[0m" 302 -
+2025-10-06 22:46:14,663 INFO 127.0.0.1 - - [06/Oct/2025 22:46:14] "[32mGET / HTTP/1.1[0m" 302 -
+2025-10-06 22:47:05,004 INFO 127.0.0.1 - - [06/Oct/2025 22:47:05] "[32mGET / HTTP/1.1[0m" 302 -
+2025-10-06 22:47:07,594 INFO 127.0.0.1 - - [06/Oct/2025 22:47:07] "GET /login HTTP/1.1" 200 -
+2025-10-06 22:47:12,557 INFO 127.0.0.1 - - [06/Oct/2025 22:47:12] "[32mPOST /login HTTP/1.1[0m" 302 -
+2025-10-06 22:47:12,833 INFO 127.0.0.1 - - [06/Oct/2025 22:47:12] "[32mGET / HTTP/1.1[0m" 302 -
+2025-10-06 22:47:12,862 INFO 127.0.0.1 - - [06/Oct/2025 22:47:12] "[32mPOST /login HTTP/1.1[0m" 302 -
+2025-10-06 22:47:13,030 INFO 127.0.0.1 - - [06/Oct/2025 22:47:13] "[32mGET / HTTP/1.1[0m" 302 -
+2025-10-06 22:47:30,348 INFO  * Detected change in 'C:\\Users\\Camero\\Downloads\\ZERO\\.venv\\Lib\\site-packages\\dotenv\\__init__.py', reloading
+2025-10-06 22:47:30,354 INFO  * Detected change in 'C:\\Users\\Camero\\Downloads\\ZERO\\.venv\\Lib\\site-packages\\dotenv\\main.py', reloading
+2025-10-06 22:47:30,432 INFO  * Detected change in 'C:\\Users\\Camero\\Downloads\\ZERO\\database.py', reloading
+2025-10-06 22:47:30,439 INFO  * Detected change in 'C:\\Users\\Camero\\Downloads\\ZERO\\file_processor.py', reloading
+2025-10-06 22:47:30,465 INFO  * Detected change in 'C:\\Users\\Camero\\Downloads\\ZERO\\auth.py', reloading
+2025-10-06 22:47:35,297 WARNING  * Debugger is active!
+2025-10-06 22:47:35,303 INFO  * Debugger PIN: 121-816-919
+2025-10-06 22:47:38,641 INFO  * Detected change in 'C:\\Users\\Camero\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\logging\\__init__.py', reloading
+2025-10-06 22:47:41,828 WARNING  * Debugger is active!
+2025-10-06 22:47:41,833 INFO  * Debugger PIN: 121-816-919
+2025-10-06 22:52:25,051 INFO  * Detected change in 'C:\\Users\\Camero\\Downloads\\ZERO\\Zero.py', reloading
+2025-10-06 22:52:25,054 INFO  * Detected change in 'C:\\Users\\Camero\\Downloads\\ZERO\\Zero.py', reloading
+2025-10-06 22:52:29,450 WARNING  * Debugger is active!
+2025-10-06 22:52:29,454 INFO  * Debugger PIN: 121-816-919
+2025-10-06 22:54:01,923 INFO  * Detected change in 'C:\\Users\\Camero\\Downloads\\ZERO\\Zero.py', reloading
+2025-10-06 22:54:01,924 INFO  * Detected change in 'C:\\Users\\Camero\\Downloads\\ZERO\\Zero.py', reloading
+2025-10-06 22:54:01,927 INFO  * Detected change in 'C:\\Users\\Camero\\Downloads\\ZERO\\Zero.py', reloading
+2025-10-06 22:54:04,868 WARNING  * Debugger is active!
+2025-10-06 22:54:04,873 INFO  * Debugger PIN: 121-816-919
+2025-10-06 22:55:41,341 INFO 127.0.0.1 - - [06/Oct/2025 22:55:41] "[32mGET / HTTP/1.1[0m" 302 -
+2025-10-06 22:55:41,493 INFO 127.0.0.1 - - [06/Oct/2025 22:55:41] "GET /login HTTP/1.1" 200 -
+2025-10-06 22:55:41,722 INFO 127.0.0.1 - - [06/Oct/2025 22:55:41] "[33mGET /logozero.jpg HTTP/1.1[0m" 404 -
+2025-10-06 22:55:41,723 INFO 127.0.0.1 - - [06/Oct/2025 22:55:41] "[36mGET /newlogin/styles.css HTTP/1.1[0m" 304 -
+2025-10-06 22:55:42,367 INFO 127.0.0.1 - - [06/Oct/2025 22:55:42] "[36mGET /favicon.ico HTTP/1.1[0m" 304 -
+2025-10-06 22:58:42,755 INFO 127.0.0.1 - - [06/Oct/2025 22:58:42] "[32mGET / HTTP/1.1[0m" 302 -
+2025-10-06 22:58:42,917 INFO 127.0.0.1 - - [06/Oct/2025 22:58:42] "GET /login HTTP/1.1" 200 -
+2025-10-06 22:58:44,173 INFO 127.0.0.1 - - [06/Oct/2025 22:58:44] "GET /login HTTP/1.1" 200 -
+2025-10-06 22:58:44,464 INFO 127.0.0.1 - - [06/Oct/2025 22:58:44] "[33mGET /logozero.jpg HTTP/1.1[0m" 404 -
+2025-10-06 22:58:58,517 INFO 127.0.0.1 - - [06/Oct/2025 22:58:58] "GET /login HTTP/1.1" 200 -
+2025-10-06 23:01:03,040 INFO 127.0.0.1 - - [06/Oct/2025 23:01:03] "[32mGET / HTTP/1.1[0m" 302 -
+2025-10-06 23:01:04,655 INFO 127.0.0.1 - - [06/Oct/2025 23:01:04] "GET /login HTTP/1.1" 200 -
+2025-10-06 23:01:05,658 INFO 127.0.0.1 - - [06/Oct/2025 23:01:05] "GET /favicon.ico HTTP/1.1" 200 -
+2025-10-06 23:01:06,400 INFO 127.0.0.1 - - [06/Oct/2025 23:01:06] "[36mGET /favicon.ico HTTP/1.1[0m" 304 -
+2025-10-06 23:03:42,640 INFO  * Detected change in 'C:\\Users\\Camero\\Downloads\\ZERO\\.venv\\Lib\\site-packages\\streamlit_webrtc\\credentials.py', reloading
+2025-10-06 23:03:48,696 WARNING  * Debugger is active!
+2025-10-06 23:03:48,703 INFO  * Debugger PIN: 121-816-919
+2025-10-06 23:03:58,163 INFO 127.0.0.1 - - [06/Oct/2025 23:03:58] "[32mGET / HTTP/1.1[0m" 302 -
+2025-10-06 23:03:58,475 INFO 127.0.0.1 - - [06/Oct/2025 23:03:58] "GET /login HTTP/1.1" 200 -
+2025-10-06 23:03:58,890 INFO 127.0.0.1 - - [06/Oct/2025 23:03:58] "[36mGET /newlogin/styles.css HTTP/1.1[0m" 304 -
+2025-10-06 23:03:58,901 INFO 127.0.0.1 - - [06/Oct/2025 23:03:58] "[33mGET /logozero.jpg HTTP/1.1[0m" 404 -
+2025-10-06 23:04:01,613 INFO 127.0.0.1 - - [06/Oct/2025 23:04:01] "[36mGET /favicon.ico HTTP/1.1[0m" 304 -
+2025-10-06 23:04:10,548 INFO 127.0.0.1 - - [06/Oct/2025 23:04:10] "GET /login HTTP/1.1" 200 -
+2025-10-06 23:04:11,707 INFO 127.0.0.1 - - [06/Oct/2025 23:04:11] "GET /login HTTP/1.1" 200 -
+2025-10-06 23:04:12,582 INFO 127.0.0.1 - - [06/Oct/2025 23:04:12] "GET /login HTTP/1.1" 200 -
+2025-10-06 23:04:13,542 INFO 127.0.0.1 - - [06/Oct/2025 23:04:13] "GET /login HTTP/1.1" 200 -
