@@ -3,6 +3,7 @@ import os
 import json
 import uuid
 import hashlib
+import logging
 from werkzeug.utils import secure_filename
 from base64 import b64encode
 import requests
@@ -16,6 +17,13 @@ from auth import verificar_login, logout, registrar_usuario
 
 # Cargar variables de entorno
 load_dotenv()
+
+# Configurar logging a archivo
+logging.basicConfig(
+    filename=os.path.join(os.path.dirname(__file__), 'error.log'),
+    level=logging.ERROR,
+    format='%(asctime)s %(levelname)s %(message)s'
+)
 
 # Inicializar aplicación Flask
 app = Flask(__name__, template_folder='templates', static_folder='static')
@@ -272,8 +280,19 @@ def api_chat():
 
     try:
         response = requests.post(API_URL, headers=BASE_HEADERS, json=payload, timeout=60)
+        # Registrar cuerpo de error si falla
         if response.status_code != 200:
-            return jsonify({'error': f'Error en la API: {response.status_code}'}), 500
+            try:
+                err_json = response.json()
+            except Exception:
+                err_json = {"raw": response.text[:500]}
+            logging.error(f"Groq API error {response.status_code}: {err_json}")
+            # Mensaje amigable según código
+            if response.status_code == 401:
+                return jsonify({'error': 'Clave de API inválida o expirada'}), 500
+            if response.status_code == 404:
+                return jsonify({'error': f'Modelo no encontrado: {GROQ_TEXT_MODEL}'}), 500
+            return jsonify({'error': 'Error en la API de IA'}), 500
 
         result = response.json()
         ai_response = result['choices'][0]['message']['content']
@@ -283,8 +302,15 @@ def api_chat():
         db.add_message(chat_id, "assistant", ai_response)
 
         return jsonify({'response': ai_response, 'chat_id': chat_id})
+    except requests.exceptions.Timeout:
+        logging.error("Groq API timeout")
+        return jsonify({'error': 'Tiempo de espera agotado con la IA'}), 500
+    except requests.exceptions.RequestException as e:
+        logging.error(f"Groq API request exception: {e}")
+        return jsonify({'error': 'Error de conexión con la IA'}), 500
     except Exception as e:
-        return jsonify({'error': f'Error: {str(e)}'}), 500
+        logging.error(f"Groq API unexpected error: {e}", exc_info=True)
+        return jsonify({'error': 'Error inesperado procesando la respuesta'}), 500
 
 # API para análisis de documentos
 @app.route('/api/analyze-document', methods=['POST'])
