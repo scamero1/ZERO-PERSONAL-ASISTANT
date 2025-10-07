@@ -602,9 +602,9 @@ def logout():
     usuario = st.session_state.get("usuario", "USER")
     st.session_state.clear()
     st.info(f"🔒 Sesión cerrada: {usuario}")
-    # Redirección confiable desde Streamlit hacia Flask
+    # Redirección desde Streamlit al logout público (dominio Cloudflare)
     st.components.v1.html(
-        '<script>window.top.location.href="http://localhost:8000/logout";</script>',
+        '<script>window.top.location.href="https://zero-va.com/logout";</script>',
         height=0
     )
     st.stop()

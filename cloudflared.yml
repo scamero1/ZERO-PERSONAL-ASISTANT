@@ -1,0 +1,11 @@
+tunnel: ZERO
+credentials-file: 'C:\Users\Camero\.cloudflared\ZERO.json'
+
+ingress:
+  - hostname: app.zero-va.com
+    service: http://localhost:8501
+  - hostname: zero-va.com
+    service: http://localhost:8000
+  - hostname: control.zero-va.com
+    service: http://localhost:8765
+  - service: http_status:404

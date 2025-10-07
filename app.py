@@ -23,6 +23,12 @@ app.secret_key = os.getenv("SECRET_KEY", "zero_secret_key")
 app.config['UPLOAD_FOLDER'] = 'user_uploads'
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
+# Endurecer cookies de sesión (opcional pero recomendado)
+app.config.update(
+    SESSION_COOKIE_SECURE=True,
+    SESSION_COOKIE_SAMESITE='Lax'
+)
+
 # Inicializar base de datos
 db = ZeroDatabase()
 
@@ -50,7 +56,17 @@ def index():
     if 'usuario' not in session:
         return redirect(url_for('login'))
     usuario = session.get('usuario')
-    return redirect(f"http://localhost:8501/?usuario={usuario}")
+
+    # Redirigir hacia la app pública (subdominio)
+    public_app_url = os.getenv("PUBLIC_APP_URL")
+    if public_app_url:
+        target = f"{public_app_url.rstrip('/')}/?usuario={usuario}"
+    else:
+        scheme = 'https' if request.is_secure else 'http'
+        host = request.host.split(':')[0]
+        target = f"{scheme}://{host}:8501/?usuario={usuario}"
+
+    return redirect(target)
 
 @app.route('/favicon.ico')
 def favicon():
@@ -188,10 +204,24 @@ def nfc_scan():
 
 @app.route('/logout')
 def flask_logout():
-    # ... existing code ...
     session.clear()
-    return redirect(url_for('login'))
-    # ... existing code ...
+    # Redirigir al sitio público (raíz)
+    public_site_url = os.getenv("PUBLIC_SITE_URL")  # p.ej. https://zero-va.com
+    if public_site_url:
+        target = public_site_url.rstrip('/') + '/'
+    else:
+        scheme = 'https' if request.is_secure else 'http'
+        host = request.host.split(':')[0]
+        target = f"{scheme}://{host}/"
+    resp = redirect(target)
+    # Borrar cookie de sesión para asegurar cierre
+    try:
+        cookie_name = app.session_cookie_name
+    except Exception:
+        cookie_name = app.config.get('SESSION_COOKIE_NAME', 'session')
+    resp.delete_cookie(cookie_name)  # sin dominio (cubre la mayoría)
+    resp.delete_cookie(cookie_name, path='/', domain=request.host.split(':')[0])  # con dominio
+    return resp
 
 # API para el chat
 @app.route('/api/chat', methods=['POST'])

@@ -678,7 +678,7 @@ def create_sidebar():
         # Cerrar sesión en la misma pestaña (target="_self")
         st.markdown(
             '''
-            <a href="http://localhost:8000/logout" target="_self"
+            <a href="https://zero-va.com/logout" target="_self"
                style="display:block;text-align:center;padding:0.875rem 1.5rem;border-radius:12px;
                       background:linear-gradient(135deg,#8b5cf6 0%,#a78bfa 100%);
                       color:white;text-decoration:none;font-weight:600;">
