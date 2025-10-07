@@ -23,7 +23,14 @@ from file_processor import FileProcessor
 
 db = ZeroDatabase()
 
+# Load environment variables
 load_dotenv()
+
+# Get API key from environment
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+if not GROQ_API_KEY:
+    st.error("GROQ_API_KEY no encontrada en las variables de entorno")
+API_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 def bootstrap_auth_from_query():
     # Inicializa claves de sesión
@@ -958,42 +965,59 @@ def chat_page():
                     </style>
                 """, unsafe_allow_html=True)
                 
-                messages_for_api = st.session_state.messages.copy()
-                
-                payload = {
-                    "model": GROQ_TEXT_MODEL,
-                    "messages": messages_for_api,
-                    "stream": True,
-                    "max_tokens": 2000,
-                    "temperature": 0.7
-                }
-                
-                response = requests.post(API_URL, headers=STREAM_HEADERS, json=payload, stream=True, timeout=120)
-                
-                if response.status_code == 200:
-                    for line in response.iter_lines():
-                        if line:
-                            line = line.decode('utf-8')
-                            if line.startswith('data: '):
-                                data = line[6:]
-                                if data.strip() == '[DONE]':
-                                    break
-                                try:
-                                    json_data = json.loads(data)
-                                    if 'choices' in json_data and json_data['choices']:
-                                        delta = json_data['choices'][0].get('delta', {})
-                                        if 'content' in delta:
-                                            full_response += delta['content']
-                                            response_with_math = render_latex_in_message(full_response + "▌")
-                                            message_placeholder.markdown(response_with_math, unsafe_allow_html=True)
-                                except:
-                                    continue
-                    
-                    final_response = render_latex_in_message(full_response)
-                    message_placeholder.markdown(final_response, unsafe_allow_html=True)
-                else:
-                    full_response = "Lo siento, hubo un error al procesar tu solicitud. Por favor, intenta nuevamente."
+                # Pre-chequeo de clave
+                if not GROQ_API_KEY:
+                    full_response = "GROQ_API_KEY no configurada en el entorno de Streamlit. Verifica tu archivo .env o variables del sistema."
                     message_placeholder.markdown(full_response)
+                else:
+                    messages_for_api = st.session_state.messages.copy()
+                    
+                    payload = {
+                        "model": GROQ_TEXT_MODEL,
+                        "messages": messages_for_api,
+                        "stream": True,
+                        "max_tokens": 2000,
+                        "temperature": 0.7
+                    }
+                    
+                    response = requests.post(API_URL, headers=STREAM_HEADERS, json=payload, stream=True, timeout=120)
+                    
+                    if response.status_code == 200:
+                        for line in response.iter_lines():
+                            if line:
+                                line = line.decode('utf-8')
+                                if line.startswith('data: '):
+                                    data = line[6:]
+                                    if data.strip() == '[DONE]':
+                                        break
+                                    try:
+                                        json_data = json.loads(data)
+                                        if 'choices' in json_data and json_data['choices']:
+                                            delta = json_data['choices'][0].get('delta', {})
+                                            if 'content' in delta:
+                                                full_response += delta['content']
+                                                response_with_math = render_latex_in_message(full_response + "▌")
+                                                message_placeholder.markdown(response_with_math, unsafe_allow_html=True)
+                                    except:
+                                        continue
+                        # Si no hubo contenido, informar
+                        if not full_response.strip():
+                            full_response = "La IA no devolvió contenido. Revisa el modelo o reintenta."
+                        final_response = render_latex_in_message(full_response)
+                        message_placeholder.markdown(final_response, unsafe_allow_html=True)
+                    else:
+                        # Mensajes de error específicos y detalle
+                        try:
+                            body = response.text[:300]
+                        except:
+                            body = ""
+                        if response.status_code == 401:
+                            full_response = "Clave de API inválida o no configurada. Verifica GROQ_API_KEY."
+                        elif response.status_code == 404:
+                            full_response = f"Modelo no encontrado: {GROQ_TEXT_MODEL}. Ajusta GROQ_TEXT_MODEL."
+                        else:
+                            full_response = f"Error de la IA ({response.status_code}). {body}"
+                        message_placeholder.markdown(full_response)
                     
             except Exception as e:
                 full_response = "Error de conexión. Por favor, verifica tu conexión a internet."
