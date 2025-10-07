@@ -1231,20 +1231,21 @@ def file_upload_page():
         st.info("📭 No tienes archivos subidos aún. ¡Sube tu primer archivo!")
 
 def pqrs_page():
-    """Página PQRS: formulario para enviar mensaje a un correo (espacio para añadir el correo destino)."""
+    """Página PQRS: formulario para enviar mensaje a soporte@zero-va.com."""
     st.title("📮 PQRS")
-    st.write("Escribe tu mensaje y envíalo por correo. Introduce el correo destino abajo (o utiliza el valor por defecto).")
+    st.write("Escribe tu mensaje y envíalo por correo. El mensaje será enviado automáticamente a soporte@zero-va.com.")
 
     # Formulario simple
     with st.form("pqrs_form"):
-        dest_email = st.text_input("Correo destino (añade aquí el correo):", value=PQRS_DEFAULT_EMAIL)
-        subject = st.text_input("Asunto:", value="PQRS desde ZERO")
+        # El correo destino es fijo y oculto
+        dest_email = "soporte@zero-va.com"
+        subject = st.text_input("Asunto:", value="")  # Espacio vacío para que el usuario escriba
         message_body = st.text_area("Mensaje:", height=200)
         submit = st.form_submit_button("Enviar mensaje")
 
     if submit:
-        if not dest_email.strip():
-            st.error("Por favor indica el correo destino.")
+        if not subject.strip():
+            st.error("Por favor indica el asunto del mensaje.")
         elif not message_body.strip():
             st.error("Escribe el mensaje antes de enviar.")
         else:
