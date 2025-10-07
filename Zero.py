@@ -196,45 +196,25 @@ def load_css():
             margin-bottom: 1.5rem;
         }
 
-        .sidebar-title {
-            font-size: 1.5rem;
-            font-weight: 800;
-            color: var(--accent-primary);
-            margin-bottom: 0.5rem;
+        /* Reducir espacio del header y del gap interno para acercarlo al contenido siguiente */
+        .main-header {
+            background: var(--secondary-bg);
+            padding: 0.6rem 1.2rem;   /* menos padding vertical */
+            border-bottom: 1px solid var(--border-color);
+            margin-bottom: 0.2rem;    /* pequeño espacio entre header y chat */
+        }
+        .main-header > div {
             display: flex;
             align-items: center;
-            gap: 0.75rem;
+            gap: 0.5rem;              /* gap más pequeño entre icono y texto */
         }
 
-        .user-info {
-            font-size: 0.9rem;
-            color: var(--text-secondary);
-            font-weight: 500;
-        }
-
-        .sidebar-section {
-            margin-bottom: 2rem;
-            padding: 0 1rem;
-        }
-
-        .section-title {
-            font-size: 0.75rem;
-            font-weight: 700;
-            color: var(--accent-secondary);
-            text-transform: uppercase;
-            letter-spacing: 0.1em;
-            margin-bottom: 1rem;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-
-        .section-title::before {
-            content: '';
-            width: 4px;
-            height: 16px;
-            background: var(--accent-gradient);
-            border-radius: 2px;
+        /* Acercar el chat-container al header */
+        .chat-container {
+            background: var(--primary-bg);
+            margin-top: 0;                        /* asegurar sin margen extra */
+            min-height: calc(100vh - 72px);      /* ajustar cálculo para nuevo header */
+            padding: 0;
         }
 
         /* Botones morados */
