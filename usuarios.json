@@ -47,5 +47,16 @@
         "clave": "jorge",
         "rol": "usuario",
         "nfc_uid": null
+    },
+    "Halley": {
+        "clave": "Mimimi8",
+        "rol": "usuario",
+        "nfc_uid": null
+    },
+    "invitado": {
+        "clave": "bienvenido",
+        "rol": "usuario",
+        "nfc_uid": null,
+        "fecha_registro": "2025-10-07 11:47:30"
     }
 }
