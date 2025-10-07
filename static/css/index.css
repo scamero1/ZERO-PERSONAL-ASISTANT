@@ -198,6 +198,7 @@ body {
   .logo-space {
     width: 120px;
     height: 120px;
+    margin-bottom: 1.5rem; /* Añade separación solo en móvil */
   }
 
   .form-box {
