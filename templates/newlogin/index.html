@@ -32,48 +32,48 @@
       <!-- Login -->
       <form id="login-form" class="form active" action="{{ url_for('login') }}" method="POST">
         <h2>ZERO AI</h2>
-        <p>Please enter your Username or Email and your Password</p>
+        <p>Ingrese su usario y contraseña</p>
 
         <div class="input-box">
           <i class="fa-solid fa-user"></i>
-          <input type="text" name="usuario" placeholder="Username or Email" required>
+          <input type="text" name="usuario" placeholder="Usuario o Correo" required>
         </div>
 
         <div class="input-box">
           <i class="fa-solid fa-lock"></i>
-          <input type="password" name="clave" placeholder="Password" required>
+          <input type="password" name="clave" placeholder="Contraseña" required>
         </div>
 
         <button type="submit" class="btn">Login</button>
 
         <div class="switch">
-          Not a member yet? <a href="#" id="show-register">Register!</a>
+          ¿No tienes cuenta? <a href="#" id="show-register">Registrate!</a>
         </div>
       </form>
 
       <!-- Register -->
       <form id="register-form" class="form" method="post" action="{{ url_for('register') }}">
         <h2>Register</h2>
-        <p>Please enter your Name, Login and your Password</p>
+        <p>Por favor escriba su usuario, correo y contraseña</p>
 
         <div class="input-box">
           <i class="fa-solid fa-user"></i>
-          <input type="text" name="usuario" placeholder="Username" required>
+          <input type="text" name="usuario" placeholder="Usuario" required>
         </div>
 
         <div class="input-box">
           <i class="fa-solid fa-envelope"></i>
-          <input type="email" name="email" placeholder="Email">
+          <input type="email" name="email" placeholder="Correo">
         </div>
 
         <div class="input-box">
           <i class="fa-solid fa-lock"></i>
-          <input type="password" name="clave" placeholder="Password" required>
+          <input type="password" name="clave" placeholder="Contraseña" required>
         </div>
 
         <div class="input-box">
           <i class="fa-solid fa-lock"></i>
-          <input type="password" name="confirmar" placeholder="Re-enter Password" required>
+          <input type="password" name="confirmar" placeholder="Ingrese otra vez su contraseña" required>
         </div>
 
         <input type="hidden" name="rol" value="usuario">
@@ -81,7 +81,7 @@
         <button type="submit" class="btn">Register</button>
 
         <div class="switch">
-          Already have an Account? <a href="#" id="show-login">Login!</a>
+          ¿Ya tienes una cuenta? <a href="#" id="show-login">Accede!</a>
         </div>
       </form>
     </div>
