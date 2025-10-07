@@ -3,6 +3,7 @@
   position: relative;
   z-index: 1;
   display: flex;
+  flex-direction: row;;
   justify-content: space-between;  /* Distribuye los elementos a la izquierda y derecha */
   align-items: center;
   height: 100vh;
