@@ -283,3 +283,15 @@ class ZeroDatabase:
             return True
         except Exception:
             return False
+
+    def delete_chat(self, chat_id: str, user_id: int) -> bool:
+        """
+        Elimina un chat y sus mensajes asociados para el usuario dado.
+        """
+        try:
+            with self.get_connection() as conn:
+                conn.execute("DELETE FROM mensajes WHERE chat_id = ?;", (chat_id,))
+                conn.execute("DELETE FROM chats WHERE id = ? AND user_id = ?;", (chat_id, user_id))
+            return True
+        except Exception:
+            return False

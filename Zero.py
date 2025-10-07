@@ -591,17 +591,35 @@ def create_sidebar():
 
         # Botón para eliminar conversaciones seleccionadas
         if st.session_state.selected_chats:
-            col_del, col_count = st.columns([1, 3])
+            # Usar una sola columna para evitar el texto vertical
+            col_del = st.columns([1])[0]
             with col_del:
-                if st.button("🗑️ Eliminar seleccionadas", key="delete_selected_chats", use_container_width=True):
+                btn_style = """
+                    <style>
+                    .delete-selected-btn button {
+                        width: 100% !important;
+                        background: linear-gradient(90deg,#a78bfa 0%,#8b5cf6 100%) !important;
+                        color: white !important;
+                        font-weight: 600 !important;
+                        border-radius: 10px !important;
+                        font-size: 1rem !important;
+                        margin-bottom: 0.5rem;
+                        display: flex !important;
+                        align-items: center !important;
+                        justify-content: center !important;
+                        gap: 0.5rem !important;
+                    }
+                    </style>
+                """
+                st.markdown(btn_style, unsafe_allow_html=True)
+                if st.button("🗑️ Eliminar seleccionadas", key="delete_selected_chats", use_container_width=True, help="Eliminar todas las conversaciones seleccionadas", type="secondary"):
                     for chat_id in list(st.session_state.selected_chats):
-                        db.delete_chat(chat_id, st.session_state.user_id)
+                        db.delete_chat(chat_id, st.session_state.user_id)  # <--- Cambia aquí
                         st.session_state.selected_chats.remove(chat_id)
                     st.session_state.chat_history = {}
                     st.session_state.messages = []
                     st.success("Conversaciones eliminadas")
                     st.rerun()
-            with col_count:
                 st.markdown(f"<span style='color:var(--text-muted);font-size:0.9rem;'>({len(st.session_state.selected_chats)} seleccionadas)</span>", unsafe_allow_html=True)
 
         # Botón nuevo chat morado
