@@ -20,6 +20,7 @@ body {
   background: radial-gradient(circle at center, #5b2c83, #2b0b3a);
   filter: blur(60px);
   opacity: 0.8;
+  animation: mymove 5s infinite;
 }
 
 .shape-left {
@@ -206,4 +207,9 @@ body {
     padding: 2rem;
     margin: 0 2rem;
   }
+}
+
+@keyframes mymove {
+  from {top: 0px}
+  to {top: 100px}
 }
