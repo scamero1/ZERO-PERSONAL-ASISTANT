@@ -117,6 +117,7 @@ def load_css():
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
         
+        /* Valores por defecto (modo oscuro) */
         :root {
             --primary-bg: #0a0a0a;
             --secondary-bg: #111111;
@@ -138,6 +139,44 @@ def load_css():
             --success: #10b981;
             --warning: #f59e0b;
             --error: #ef4444;
+        }
+
+        /* Modo claro: sobreescribe variables cuando el sistema lo prefiera */
+        @media (prefers-color-scheme: light) {
+            :root {
+                --primary-bg: #f8fafc;
+                --secondary-bg: #ffffff;
+                --sidebar-bg: #f3f4f6;
+                --card-bg: #ffffff;
+                --accent-primary: #6d28d9;
+                --accent-secondary: #7c3aed;
+                --accent-gradient: linear-gradient(135deg, #6d28d9 0%, #7c3aed 100%);
+                --text-primary: #0f172a;
+                --text-secondary: #475569;
+                --text-muted: #6b7280;
+                --border-color: #e5e7eb;
+                --border-light: #e6e9ef;
+                --user-msg-bg: #e6eef8;
+                --assistant-msg-bg: #f8fafc;
+                --shadow-sm: 0 1px 3px rgba(15,23,42,0.06);
+                --shadow-md: 0 4px 12px rgba(15,23,42,0.06);
+                --shadow-lg: 0 10px 30px rgba(15,23,42,0.08);
+                --success: #059669;
+                --warning: #d97706;
+                --error: #dc2626;
+            }
+
+            /* Ajustes secundarios para modo claro */
+            .stApp {
+                color: var(--text-primary);
+            }
+            .css-1d391kg, .css-1lcbmhc {
+                background: var(--sidebar-bg) !important;
+                border-right: 1px solid var(--border-color);
+            }
+            .stButton > button {
+                color: white;
+            }
         }
 
         .stApp {
