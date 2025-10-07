@@ -18,6 +18,10 @@ import io
 import re
 from datetime import datetime
 
+# Añadidos para enviar emails
+import smtplib
+from email.message import EmailMessage
+
 from database import ZeroDatabase
 from file_processor import FileProcessor
 
@@ -27,41 +31,6 @@ db = ZeroDatabase()
 load_dotenv()
 
 # Get API key from environment
-GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-if not GROQ_API_KEY:
-    st.error("GROQ_API_KEY no encontrada en las variables de entorno")
-API_URL = "https://api.groq.com/openai/v1/chat/completions"
-
-def bootstrap_auth_from_query():
-    # Inicializa claves de sesión
-    if "autenticado" not in st.session_state:
-        st.session_state.autenticado = False
-    if "usuario" not in st.session_state:
-        st.session_state.usuario = None
-    if "rol" not in st.session_state:
-        st.session_state.rol = "usuario"
-
-    # Lee usuario desde la URL (ej. http://localhost:8501/?usuario=admin)
-    qp = st.query_params
-    usuario_qp = qp.get("usuario")
-    if isinstance(usuario_qp, list):
-        usuario_qp = usuario_qp[0]
-
-    if usuario_qp:
-        st.session_state.autenticado = True
-        st.session_state.usuario = usuario_qp
-        st.session_state.rol = "admin" if usuario_qp == "admin" else "usuario"
-
-# Llama al bootstrap al cargar
-bootstrap_auth_from_query()
-
-st.set_page_config(
-    page_title="ZERO - AI Assistant",
-    page_icon="templates/newlogin/logozero.jpg",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
-
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 if not GROQ_API_KEY:
     st.error("GROQ_API_KEY no encontrada en las variables de entorno")
@@ -692,6 +661,11 @@ def create_sidebar():
             st.session_state.current_page = "files"
             st.rerun()
 
+        # NUEVO: Botón PQRS
+        if st.button("PQRS", key="nav_pqrs", use_container_width=True, type="primary"):
+            st.session_state.current_page = "pqrs"
+            st.rerun()
+
         if st.session_state.rol == "admin":
             if st.button("Panel Admin", key="nav_admin", use_container_width=True, type="primary"):
                 st.session_state.current_page = "admin"
@@ -1252,7 +1226,54 @@ def file_upload_page():
                             st.rerun()
     else:
         st.info("📭 No tienes archivos subidos aún. ¡Sube tu primer archivo!")
-        
+
+def pqrs_page():
+    """Página PQRS: formulario para enviar mensaje a un correo (espacio para añadir el correo destino)."""
+    st.title("📮 PQRS")
+    st.write("Escribe tu mensaje y envíalo por correo. Introduce el correo destino abajo (o utiliza el valor por defecto).")
+
+    # Formulario simple
+    with st.form("pqrs_form"):
+        dest_email = st.text_input("Correo destino (añade aquí el correo):", value=PQRS_DEFAULT_EMAIL)
+        subject = st.text_input("Asunto:", value="PQRS desde ZERO")
+        message_body = st.text_area("Mensaje:", height=200)
+        submit = st.form_submit_button("Enviar mensaje")
+
+    if submit:
+        if not dest_email.strip():
+            st.error("Por favor indica el correo destino.")
+        elif not message_body.strip():
+            st.error("Escribe el mensaje antes de enviar.")
+        else:
+            # Intentar enviar usando variables SMTP en .env
+            SMTP_HOST = os.getenv("SMTP_HOST", "")
+            SMTP_PORT = int(os.getenv("SMTP_PORT", "587") or 587)
+            SMTP_USER = os.getenv("SMTP_USER", "")
+            SMTP_PASS = os.getenv("SMTP_PASS", "")
+            FROM_EMAIL = os.getenv("FROM_EMAIL", SMTP_USER or os.getenv("PQRS_FROM", ""))
+
+            if not SMTP_HOST or not SMTP_USER or not SMTP_PASS:
+                st.warning("No están configuradas las credenciales SMTP en el entorno. Puedes copiar el mensaje y enviarlo manualmente, o configura las variables SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS y FROM_EMAIL en tu .env para envío automático.")
+                st.code(f"Para: {dest_email}\nAsunto: {subject}\n\n{message_body}")
+            else:
+                try:
+                    msg = EmailMessage()
+                    msg["From"] = FROM_EMAIL or SMTP_USER
+                    msg["To"] = dest_email
+                    msg["Subject"] = subject
+                    msg.set_content(message_body)
+
+                    with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=20) as smtp:
+                        smtp.starttls()
+                        smtp.login(SMTP_USER, SMTP_PASS)
+                        smtp.send_message(msg)
+
+                    st.success("✅ Mensaje enviado correctamente.")
+                except Exception as e:
+                    st.error(f"⚠️ Error al enviar el correo: {e}")
+                    st.info("Puedes revisar la configuración SMTP en las variables de entorno o enviar el mensaje manualmente:")
+                    st.code(f"Para: {dest_email}\nAsunto: {subject}\n\n{message_body}")
+
 # --- FUNCIÓN PRINCIPAL ---
 def main():
     """Aplicación principal"""
@@ -1287,6 +1308,8 @@ def main():
         file_upload_page()
     elif st.session_state.current_page == "admin":
         register_page()
+    elif st.session_state.current_page == "pqrs":
+        pqrs_page()
 
 if __name__ == "__main__":
     main()
