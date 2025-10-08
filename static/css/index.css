@@ -27,6 +27,7 @@ body {
   height: 480px;
   top: -200px;
   left: -250px;
+  animation: moveL 5s infinite;
 }
 
 .shape-right {
@@ -206,4 +207,10 @@ body {
     padding: 2rem;
     margin: 0 2rem;
   }
+}
+
+@keyframes moveL{
+  0%{left: -250px}
+  50%{background-color: transparent;}
+  100%{left: 250px}
 }
