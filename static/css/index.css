@@ -35,6 +35,7 @@ body {
   height: 550px;
   bottom: -250px;
   right: -350px;
+  animation: moveR 5s infinite;
 }
 
 /* === Contenedor principal === */
@@ -138,6 +139,13 @@ body {
   color: rgba(255, 255, 255, 0.5);
 }
 
+.gradient-text{
+  background: linear-gradient(90deg, purple, white);
+  background-clip: text;
+  color: transparent;
+  background-size: 200% auto;
+  animation: gradient-blink 5s linear infinite alternate;
+}
 /* === Opciones === */
 .options {
   text-align: right;
@@ -209,8 +217,24 @@ body {
   }
 }
 
-@keyframes moveL{
-  0%{left: -250px}
-  50%{background-color: transparent;}
-  100%{left: 250px}
+@keyframes moveL {
+  0% {left: -300px;}
+  20% {background:purple}
+  40% {background:transparent}
+  60% {background:purple}
+  100% {left: 400px; background:transparent}
+}
+
+@keyframes moveR {
+  0% {right: -400px;}
+  20% {background:purple}
+  40% {background:transparent}
+  60% {background:purple}
+  100% {right: 400px; background:transparent}
+}
+
+@keyframes gradient-blink {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
 }
