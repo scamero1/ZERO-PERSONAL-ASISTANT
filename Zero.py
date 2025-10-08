@@ -17,6 +17,7 @@ import json
 import io
 import re
 from datetime import datetime
+import unicodedata
 
 # Añadidos para enviar emails
 import smtplib
@@ -50,6 +51,13 @@ STREAM_HEADERS = {
     **BASE_HEADERS,
     "Accept": "text/event-stream",
 }
+
+def normalize_str(s: str) -> str:
+    """Convierte a minúsculas y quita acentos para comparar."""
+    s = (s or "")
+    s = s.lower()
+    s = unicodedata.normalize("NFD", s)
+    return "".join(ch for ch in s if unicodedata.category(ch) != "Mn")
 
 def safe_text(text: str) -> str:
     """Repara textos con problemas de encoding"""
@@ -899,6 +907,202 @@ def save_uploaded_file(uploaded_file):
     except Exception as e:
         return None, f"Error procesando archivo: {str(e)}"
 
+# --- INDEXACIÓN Y BÚSQUEDA DE DOCUMENTOS ---
+def sync_user_files_from_disk(user_id: int):
+    """Escanea user_uploads/{user_id} y registra en BD los archivos faltantes."""
+    base_dir = os.path.join("user_uploads", str(user_id))
+    if not os.path.isdir(base_dir):
+        return
+
+    # Archivos ya en BD por path
+    try:
+        existing = db.get_user_files(user_id)
+        existing_paths = {f.get("file_path") for f in existing if f.get("file_path")}
+    except Exception:
+        existing_paths = set()
+
+    # Mapeo de tipos (igual que en save_uploaded_file)
+    ext_map = {
+        'pdf': 'pdf', 'docx': 'word', 'doc': 'word', 'txt': 'text',
+        'md': 'markdown', 'xlsx': 'excel', 'xls': 'excel', 'csv': 'csv',
+        'jpg': 'image', 'jpeg': 'image', 'png': 'image', 'gif': 'image'
+    }
+
+    for name in os.listdir(base_dir):
+        path = os.path.join(base_dir, name)
+        if not os.path.isfile(path):
+            continue
+        if path in existing_paths:
+            continue
+
+        ext = name.split('.')[-1].lower()
+        file_type = ext_map.get(ext, 'unknown')
+        if file_type == 'unknown':
+            continue
+
+        try:
+            with open(path, "rb") as f:
+                data = f.read()
+            content = ""
+            analysis = ""
+            if file_type in ['pdf', 'word']:
+                processor = FileProcessor()
+                result = processor.process_file(data, name)
+                content = (result.get('content') or "")[:5000]
+            else:
+                try:
+                    content = data.decode('utf-8')[:5000]
+                except Exception:
+                    content = data.decode('latin-1', errors='ignore')[:5000]
+
+            if content and len(content.strip()) > 50:
+                # Opcional: análisis con Groq si tienes clave
+                try:
+                    analysis = analyze_document_with_groq(content, name)
+                except Exception:
+                    analysis = f"Documento indexado: {name}"
+            else:
+                analysis = f"Documento indexado: {name}"
+
+            db.save_file(
+                user_id=user_id,
+                filename=name,
+                file_path=path,
+                file_type=file_type,
+                file_size=os.path.getsize(path),
+                content_extracted=content,
+                analysis_summary=analysis[:350]
+            )
+        except Exception:
+            # No se detiene la indexación por un archivo problemático
+            continue
+
+def search_user_documents(user_id: int, query: str):
+    """Busca en BD por nombre y contenido, acento-insensible."""
+    q = normalize_str(query)
+    if not q:
+        return []
+    try:
+        files = db.get_user_files(user_id)
+    except Exception:
+        files = []
+    results = []
+    for f in files:
+        name = normalize_str(f.get("filename") or "")
+        content = normalize_str(f.get("content_extracted") or "")
+        score = 0
+        if q in name:
+            score += 2
+        if q in content:
+            score += 1
+        if score > 0:
+            results.append((score, f))
+    results.sort(key=lambda x: x[0], reverse=True)
+    return [r[1] for r in results]
+
+def search_files_on_disk(query: str):
+    """Escanea user_uploads/* y uploads/* si no hay user_id; coincide por nombre."""
+    q = normalize_str(query)
+    base_dirs = ["user_uploads", "uploads"]
+    hits = []
+    for base in base_dirs:
+        if not os.path.isdir(base):
+            continue
+        for uid in os.listdir(base):
+            user_dir = os.path.join(base, uid)
+            if not os.path.isdir(user_dir):
+                continue
+            for name in os.listdir(user_dir):
+                path = os.path.join(user_dir, name)
+                if not os.path.isfile(path):
+                    continue
+                if q in normalize_str(name):
+                    hits.append({"filename": name, "file_path": path, "user_id": uid})
+    return hits
+
+def maybe_answer_doc_query(prompt: str, user_id: int | None):
+    """Detecta preguntas tipo inventario/ubicación y responde localmente."""
+    text = (prompt or "")
+    norm = normalize_str(text)
+    intents = [
+        "que libro", "qué libro", "que documentos", "qué documentos",
+        "que archivo", "qué archivo", "donde esta", "dónde está",
+        "donde lo encuentro", "dónde lo encuentro", "que tengo", "qué tengo", "buscar"
+    ]
+    if not any(k in norm for k in intents):
+        return None
+
+    lines = []
+    if user_id:
+        matches = search_user_documents(user_id, text)
+        if matches:
+            for f in matches[:8]:
+                ruta = f.get("file_path") or f"user_uploads/{user_id}/{f.get('filename')}"
+                lines.append(f"- {f.get('filename')} (lo encuentras en: {ruta})")
+    # Fallback global si no hay user_id o no hubo matches
+    if not lines:
+        global_hits = search_files_on_disk(text)
+        if global_hits:
+            for f in global_hits[:8]:
+                lines.append(f"- {f['filename']} (lo encuentras en: {f['file_path']})")
+
+    if not lines:
+        return "No encuentro coincidencias en tus documentos. Pruébalo con el nombre o tema exacto."
+
+    header = "Encontré estos documentos:\n" if len(lines) > 1 else "Encontré este documento:\n"
+    return header + "\n".join(lines)
+
+def search_user_documents(user_id: int, query: str):
+    """Devuelve coincidencias por nombre y contenido."""
+    q = (query or "").strip().lower()
+    if not q:
+        return []
+
+    try:
+        files = db.get_user_files(user_id)
+    except Exception:
+        files = []
+
+    results = []
+    for f in files:
+        name = (f.get("filename") or "").lower()
+        content = (f.get("content_extracted") or "").lower()
+        score = 0
+        if q in name:
+            score += 2
+        if q in content:
+            score += 1
+        if score > 0:
+            results.append((score, f))
+    # Orden por relevancia
+    results.sort(key=lambda x: x[0], reverse=True)
+    return [r[1] for r in results]
+
+def maybe_answer_doc_query(prompt: str, user_id: int):
+    """Detecta preguntas sobre inventario/ubicación y arma respuesta local."""
+    text = (prompt or "").lower()
+    intents = [
+        "qué libro", "que libro", "qué documentos", "qué archivo",
+        "dónde está", "donde está", "donde lo encuentro", "dónde lo encuentro",
+        "qué tengo", "que tengo", "buscar"
+    ]
+    if not any(k in text for k in intents):
+        return None
+
+    # Palabras clave simples (el último término sustantivo suele ayudar)
+    # Heurística: usa todo el prompt para buscar
+    matches = search_user_documents(user_id, text)
+    if not matches:
+        return "No encuentro coincidencias en tus documentos. Prueba con el nombre o tema exacto."
+
+    # Construir respuesta con rutas
+    lines = []
+    for f in matches[:8]:
+        ruta = f.get("file_path") or f"user_uploads/{user_id}/{f.get('filename')}"
+        lines.append(f"- {f.get('filename')} (lo encuentras en: {ruta})")
+    header = "Estos son los documentos que coinciden:\n" if len(matches) > 1 else "Encontré este documento:\n"
+    return header + "\n".join(lines)
+
 # --- PROCESAMIENTO DE ECUACIONES ---
 def render_latex_in_message(content):
     """Convierte ecuaciones LaTeX en formato legible"""
@@ -988,6 +1192,14 @@ def chat_page():
     # Input del chat
     if prompt := st.chat_input("Escribe tu mensaje..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
+
+        # Respuesta local sobre inventario/ubicación de documentos (antes de Groq)
+        local = maybe_answer_doc_query(prompt, st.session_state.get("user_id"))
+        if local:
+            st.session_state.messages.append({"role": "assistant", "content": local})
+            save_current_chat()
+            st.rerun()
+            return
         
         with st.chat_message("assistant"):
             message_placeholder = st.empty()
@@ -1345,9 +1557,11 @@ def main():
     # Si tenemos user_id, precargar lista de archivos del usuario
     if st.session_state.get("user_id") and "user_files" not in st.session_state:
         try:
+            sync_user_files_from_disk(st.session_state.user_id)
             st.session_state.user_files = db.get_user_files(st.session_state.user_id)
-        except:
+        except Exception:
             st.session_state.user_files = []
+        st.session_state.files_synced = True
 
     # Navegación desde sidebar
     create_sidebar()
