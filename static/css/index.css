@@ -35,6 +35,7 @@ body {
   height: 550px;
   bottom: -250px;
   right: -350px;
+  animation: moveR 5s infinite;
 }
 
 /* === Contenedor principal === */
@@ -212,5 +213,11 @@ body {
 @keyframes moveL {
   0% {left: -800px; background-color:#5b2c83;}
   50% {background-color: transparent;}
-  100% {left:800px; background-color:#5b2c83;}
+  100% {right:800px; background-color:#5b2c83;}
+}
+
+@keyframes moveR {
+  0% {right: -350px; background-color:#5b2c83;}
+  50% {background-color: transparent;}
+  100% {left:350px; background-color:#5b2c83;}
 }
