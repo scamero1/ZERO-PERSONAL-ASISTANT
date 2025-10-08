@@ -28,6 +28,7 @@ body {
   top: -200px;
   left: -800px;
   animation: moveL 5s infinite;
+  animation-delay: 2s;
 }
 
 .shape-right {
@@ -35,6 +36,7 @@ body {
   height: 550px;
   bottom: -250px;
   right: -350px;
+  animation: moveR 5s infinite;
 }
 
 /* === Contenedor principal === */
@@ -210,9 +212,13 @@ body {
 }
 
 @keyframes moveL {
-  from {left: -800px}
-  to {left:800px}
-  0% {background-color:#5b2c83;}
+  0% {left: -800px; background-color:#5b2c83;}
   50% {background-color: transparent;}
-  100% {background-color:#5b2c83;}
+  100% {left:800px; background-color:#5b2c83;}
+}
+
+@keyframes moveR {
+  0% {right: -350px; background-color:#5b2c83;}
+  50% {background-color: transparent;}
+  100% {right:350px; background-color:#5b2c83;}
 }
