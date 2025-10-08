@@ -977,15 +977,17 @@ def sync_user_files_from_disk(user_id: int):
             # No se detiene la indexación por un archivo problemático
             continue
 
-def search_user_documents(user_id: int, query: str):
-    """Busca en BD por nombre y contenido, acento-insensible."""
-    q = normalize_str(query)
+def search_user_documents(user_id: int | None, query: str):
+    """Busca coincidencias en los archivos del usuario (score simple)."""
+    q = normalize_str(query or "")
     if not q:
         return []
+
     try:
-        files = db.get_user_files(user_id)
+        files = db.get_user_files(user_id) if user_id else []
     except Exception:
         files = []
+
     results = []
     for f in files:
         name = normalize_str(f.get("filename") or "")
@@ -997,110 +999,44 @@ def search_user_documents(user_id: int, query: str):
             score += 1
         if score > 0:
             results.append((score, f))
-    results.sort(key=lambda x: x[0], reverse=True)
-    return [r[1] for r in results]
 
-def search_files_on_disk(query: str):
-    """Escanea user_uploads/* y uploads/* si no hay user_id; coincide por nombre."""
-    q = normalize_str(query)
-    base_dirs = ["user_uploads", "uploads"]
-    hits = []
-    for base in base_dirs:
-        if not os.path.isdir(base):
-            continue
-        for uid in os.listdir(base):
-            user_dir = os.path.join(base, uid)
-            if not os.path.isdir(user_dir):
-                continue
-            for name in os.listdir(user_dir):
-                path = os.path.join(user_dir, name)
-                if not os.path.isfile(path):
-                    continue
-                if q in normalize_str(name):
-                    hits.append({"filename": name, "file_path": path, "user_id": uid})
-    return hits
+    results.sort(key=lambda x: x[0], reverse=True)
+    if results:
+        return [r[1] for r in results]
+
+    # Si no hay resultados en la BD del usuario, intentar buscar en disco (fallback)
+    try:
+        global_hits = search_files_on_disk(query)
+    except Exception:
+        global_hits = []
+    return global_hits
 
 def maybe_answer_doc_query(prompt: str, user_id: int | None):
-    """Detecta preguntas tipo inventario/ubicación y responde localmente."""
-    text = (prompt or "")
+    """
+    Intercepta preguntas del tipo "dónde se encuentra X" y responde con rutas
+    a los archivos que coincidan con X entre los archivos subidos por el usuario.
+    """
+    text = (prompt or "").strip()
     norm = normalize_str(text)
     intents = [
-        "que libro", "qué libro", "que documentos", "qué documentos",
-        "que archivo", "qué archivo", "donde esta", "dónde está",
-        "donde lo encuentro", "dónde lo encuentro", "que tengo", "qué tengo", "buscar"
+        "donde se encuentra", "dónde se encuentra", "donde esta", "dónde está",
+        "donde lo encuentro", "dónde lo encuentro", "donde encuentro", "dónde encuentro",
+        "dónde está", "donde está", "buscar", "encontrar"
     ]
     if not any(k in norm for k in intents):
         return None
 
-    lines = []
-    if user_id:
-        matches = search_user_documents(user_id, text)
-        if matches:
-            for f in matches[:8]:
-                ruta = f.get("file_path") or f"user_uploads/{user_id}/{f.get('filename')}"
-                lines.append(f"- {f.get('filename')} (lo encuentras en: {ruta})")
-    # Fallback global si no hay user_id o no hubo matches
-    if not lines:
-        global_hits = search_files_on_disk(text)
-        if global_hits:
-            for f in global_hits[:8]:
-                lines.append(f"- {f['filename']} (lo encuentras en: {f['file_path']})")
-
-    if not lines:
-        return "No encuentro coincidencias en tus documentos. Pruébalo con el nombre o tema exacto."
-
-    header = "Encontré estos documentos:\n" if len(lines) > 1 else "Encontré este documento:\n"
-    return header + "\n".join(lines)
-
-def search_user_documents(user_id: int, query: str):
-    """Devuelve coincidencias por nombre y contenido."""
-    q = (query or "").strip().lower()
-    if not q:
-        return []
-
-    try:
-        files = db.get_user_files(user_id)
-    except Exception:
-        files = []
-
-    results = []
-    for f in files:
-        name = (f.get("filename") or "").lower()
-        content = (f.get("content_extracted") or "").lower()
-        score = 0
-        if q in name:
-            score += 2
-        if q in content:
-            score += 1
-        if score > 0:
-            results.append((score, f))
-    # Orden por relevancia
-    results.sort(key=lambda x: x[0], reverse=True)
-    return [r[1] for r in results]
-
-def maybe_answer_doc_query(prompt: str, user_id: int):
-    """Detecta preguntas sobre inventario/ubicación y arma respuesta local."""
-    text = (prompt or "").lower()
-    intents = [
-        "qué libro", "que libro", "qué documentos", "qué archivo",
-        "dónde está", "donde está", "donde lo encuentro", "dónde lo encuentro",
-        "qué tengo", "que tengo", "buscar"
-    ]
-    if not any(k in text for k in intents):
-        return None
-
-    # Palabras clave simples (el último término sustantivo suele ayudar)
-    # Heurística: usa todo el prompt para buscar
+    # Buscar coincidencias en archivos del usuario
     matches = search_user_documents(user_id, text)
     if not matches:
-        return "No encuentro coincidencias en tus documentos. Prueba con el nombre o tema exacto."
+        return "No encuentro coincidencias en tus documentos. Prueba con el nombre exacto o sube el archivo."
 
-    # Construir respuesta con rutas
     lines = []
     for f in matches[:8]:
         ruta = f.get("file_path") or f"user_uploads/{user_id}/{f.get('filename')}"
-        lines.append(f"- {f.get('filename')} (lo encuentras en: {ruta})")
-    header = "Estos son los documentos que coinciden:\n" if len(matches) > 1 else "Encontré este documento:\n"
+        lines.append(f"- {f.get('filename')} (ruta: {ruta})")
+
+    header = "Encontré estos documentos:\n" if len(lines) > 1 else "Encontré este documento:\n"
     return header + "\n".join(lines)
 
 # --- PROCESAMIENTO DE ECUACIONES ---
