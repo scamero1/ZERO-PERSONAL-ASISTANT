@@ -28,6 +28,7 @@ body {
   top: -200px;
   left: -800px;
   animation: moveL 5s infinite;
+  animation-delay: 2s;
 }
 
 .shape-right {
@@ -213,11 +214,11 @@ body {
 @keyframes moveL {
   0% {left: -800px; background-color:#5b2c83;}
   50% {background-color: transparent;}
-  100% {right:800px; background-color:#5b2c83;}
+  100% {left:800px; background-color:#5b2c83;}
 }
 
 @keyframes moveR {
   0% {right: -350px; background-color:#5b2c83;}
   50% {background-color: transparent;}
-  100% {left:350px; background-color:#5b2c83;}
+  100% {right:350px; background-color:#5b2c83;}
 }
