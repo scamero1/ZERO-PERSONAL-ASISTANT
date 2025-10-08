@@ -20,14 +20,14 @@ body {
   background: radial-gradient(circle at center, #5b2c83, #2b0b3a);
   filter: blur(60px);
   opacity: 0.8;
-  animation: mymove 5s infinite;
 }
 
 .shape-left {
   width: 480px;
   height: 480px;
   top: -200px;
-  left: -250px;
+  left: -800px;
+  animation: moveL 5s infinite;
 }
 
 .shape-right {
@@ -209,7 +209,10 @@ body {
   }
 }
 
-@keyframes mymove {
-  from {top: 0px}
-  to {top:}
+@keyframes moveL {
+  from {left: -800px}
+  to {left:800px}
+  0% {background-color:#5b2c83;}
+  50% {background-color: transparent;}
+  100% {background-color:#5b2c83;}
 }
