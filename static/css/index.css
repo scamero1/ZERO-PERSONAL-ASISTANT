@@ -26,9 +26,7 @@ body {
   width: 480px;
   height: 480px;
   top: -200px;
-  left: -800px;
-  animation: moveL 5s infinite;
-  animation-delay: 2s;
+  left: -250px;
 }
 
 .shape-right {
@@ -36,7 +34,6 @@ body {
   height: 550px;
   bottom: -250px;
   right: -350px;
-  animation: moveR 5s infinite;
 }
 
 /* === Contenedor principal === */
