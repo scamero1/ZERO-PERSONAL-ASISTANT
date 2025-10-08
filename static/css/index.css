@@ -17,7 +17,7 @@ body {
 .shape {
   position: absolute;
   border-radius: 50%;
-  background: radial-gradient(circle at center, #bde700, #2b0b3a);
+  background: radial-gradient(circle at center, #5b2c83, #2b0b3a);
   filter: blur(60px);
   opacity: 0.8;
 }
