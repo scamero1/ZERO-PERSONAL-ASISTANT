@@ -210,9 +210,7 @@ body {
 }
 
 @keyframes moveL {
-  from {left: -800px}
-  to {left:800px}
-  0% {background-color:#5b2c83;}
+  0% {left: -800px; background-color:#5b2c83;}
   50% {background-color: transparent;}
-  100% {background-color:#5b2c83;}
+  100% {left:800px; background-color:#5b2c83;}
 }
