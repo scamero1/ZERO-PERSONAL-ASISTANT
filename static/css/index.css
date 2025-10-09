@@ -27,7 +27,7 @@ body {
   height: 480px;
   top: -200px;
   left: -250px;
-  animation: moveL 5s infinite;
+  animation: moveL 5s ease-in-out infinite;
 }
 
 .shape-right {
@@ -35,7 +35,7 @@ body {
   height: 550px;
   bottom: -250px;
   right: -350px;
-  animation: moveR 5s infinite;
+  animation: moveR 5s ease-in-out infinite;
 }
 
 /* === Contenedor principal === */
