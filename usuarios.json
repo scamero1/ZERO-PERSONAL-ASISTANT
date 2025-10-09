@@ -58,5 +58,10 @@
         "rol": "usuario",
         "nfc_uid": null,
         "fecha_registro": "2025-10-07 11:47:30"
+    },
+    "1111": {
+        "clave": "Qaz7xsw2*",
+        "rol": "usuario",
+        "nfc_uid": null
     }
 }
