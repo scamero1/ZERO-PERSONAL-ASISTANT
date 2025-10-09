@@ -104,7 +104,7 @@ body {
   background-clip: text;
   color: transparent;
   background-size: 200% auto;
-  animation: gradient-blink 5s linear infinite alternate;
+  animation: gradient-blink 3s linear infinite alternate;
 }
 
 .form p {
