@@ -25,19 +25,19 @@ body {
 .shape-left {
   width: 480px;
   height: 480px;
-  top: -400px;
+  top: -300px;
   left: -250px;
   animation: moveL 5s ease-in-out infinite;
-  animation-delay: 2s;
+  animation-delay: 5s;
 }
 
 .shape-right {
   width: 550px;
   height: 550px;
-  bottom: -250px;
+  bottom: -300px;
   right: -450px;
   animation: moveR 5s ease-in-out infinite;
-  animation-delay: 2s;
+  animation-delay: 5s;
 }
 
 /* === Contenedor principal === */
