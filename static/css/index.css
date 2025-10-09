@@ -17,7 +17,7 @@ body {
 .shape {
   position: absolute;
   border-radius: 50%;
-  background: radial-gradient(circle at center, #5b2c83, #2b0b3a);
+  background: radial-gradient(circle at center, #2b0b3a, #2b0b3a);
   filter: blur(60px);
   opacity: 0.8;
 }
@@ -34,7 +34,7 @@ body {
 .shape-right {
   width: 550px;
   height: 550px;
-  bottom: -300px;
+  bottom: -350px;
   right: -450px;
   animation: moveR 5s ease-in-out infinite;
   animation-delay: 5s;
@@ -219,19 +219,19 @@ body {
 }
 
 @keyframes moveL {
-  0% {left: -300px;}
+  0% {left: -300px; background:#5b2c83}
   20% {background:#5b2c83}
   40% {background:transparent}
   60% {background:#5b2c83}
-  100% {left: 700px; background:transparent}
+  100% {left: 120%; background:transparent}
 }
 
 @keyframes moveR {
-  0% {right: -400px;}
+  0% {right: -400px; background:#5b2c83}
   20% {background:#5b2c83}
   40% {background:transparent}
   60% {background:#5b2c83}
-  100% {right: 800px; background:transparent}
+  100% {right: 120%; background:transparent}
 }
 
 @keyframes gradient-blink {
