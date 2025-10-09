@@ -218,7 +218,7 @@ body {
 }
 
 @keyframes moveL {
-  0% {left: -50%; background:#5b2c83}
+  0% {left: -100%; background:#5b2c83}
   20% {background:#5b2c83}
   40% {background:transparent}
   60% {background:#5b2c83}
@@ -226,7 +226,7 @@ body {
 }
 
 @keyframes moveR {
-  0% {right: -50%; background:#5b2c83}
+  0% {right: -100%; background:#5b2c83}
   20% {background:#5b2c83}
   40% {background:transparent}
   60% {background:#5b2c83}
