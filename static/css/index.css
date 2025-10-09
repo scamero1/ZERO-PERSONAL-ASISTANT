@@ -101,17 +101,11 @@ body {
   margin-bottom: 0.5rem;
   text-align: center;
   background: linear-gradient(
-  to right
-  rgb(91, 44, 131),
-  rgb(132, 97, 163),
-  rgb(173, 151, 195),
-  rgb(214, 203, 225),
-  rgb(255, 255, 255),
-  );
+  to right);
   background-clip: text;
   color: transparent;
   background-size: 200% auto;
-  animation: gradient-blink 3s linear infinite;
+  animation: gradient-blink 5s linear infinite alternate;
 }
 
 .form p {
@@ -229,7 +223,7 @@ body {
   20% {background:#5b2c83}
   40% {background:transparent}
   60% {background:#5b2c83}
-  100% {left: 800px; background:transparent}
+  100% {left: 700px; background:transparent}
 }
 
 @keyframes moveR {
@@ -241,6 +235,7 @@ body {
 }
 
 @keyframes gradient-blink {
-  0% { background-position: 200% 50%; }
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
   100% { background-position: 0% 50%; }
 }
