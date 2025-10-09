@@ -908,12 +908,149 @@ def save_uploaded_file(uploaded_file):
         return None, f"Error procesando archivo: {str(e)}"
 
 # --- INDEXACIÓN Y BÚSQUEDA DE DOCUMENTOS ---
-def sync_user_files_from_disk(user_id: int):
-    """Escanea user_uploads/{user_id} y registra en BD los archivos faltantes."""
-    base_dir = os.path.join("user_uploads", str(user_id))
-    if not os.path.isdir(base_dir):
-        return
 
+def is_advice_question(prompt: str) -> bool:
+    """Detecta si el usuario pide consejo/guía/explicación práctica (cualquier tema)."""
+    norm = normalize_str(prompt)
+    intents = [
+        "como puedo", "cómo puedo", "como hacer", "cómo hacer",
+        "recomendacion", "recomendación", "recomendaciones",
+        "sugerencia", "sugerencias",
+        "estrategia", "guia", "guía",
+        "pasos", "buenas practicas", "buenas prácticas",
+        "ideas", "alternativas", "riesgos",
+        "plan", "que hacer", "qué hacer",
+        "mejorar", "optimizar", "explicame", "explícame", "explicacion", "explicación"
+    ]
+    return any(k in norm for k in intents)
+
+def is_greeting_or_smalltalk(prompt: str) -> bool:
+    """Detecta saludos/charla corta para usar IA general sin RAG ni editor."""
+    norm = normalize_str(prompt)
+    intents = [
+        "hola", "buenos dias", "buenas tardes", "buenas noches",
+        "que tal", "qué tal", "como estas", "cómo estás", "hey",
+        "hi", "hello", "saludos"
+    ]
+    if len(norm.split()) <= 3 and any(k in norm for k in intents):
+        return True
+    return any(k in norm for k in intents)
+
+def is_analysis_question(prompt: str) -> bool:
+    """Detecta si el usuario solicita un análisis/estudio basado en documentos."""
+    norm = normalize_str(prompt)
+    intents = [
+        "analiza", "analisis", "análisis",
+        "compara", "comparacion", "comparación",
+        "resume", "resumen", "sintetiza", "desglosa", "detalla",
+        "extrae", "extraer", "identifica", "clasifica",
+        "calcula", "grafica", "gráfico", "grafico",
+        "que dice", "qué dice", "que contiene", "qué contiene",
+        "busca en el documento", "buscar en el documento"
+    ]
+    return any(k in norm for k in intents)
+
+def generate_advice_response(prompt: str, user_id: int | None, recent_messages: list[dict]) -> str:
+    """
+    Crea una respuesta de consejo/estrategia usando el contexto reciente del chat.
+    Produce pasos accionables y consideraciones en español.
+    """
+    try:
+        convo = []
+        # Usa las últimas 8 intervenciones para dar contexto (incluye tu comparación previa)
+        for m in recent_messages[-8:]:
+            role = m.get("role", "user")
+            content = (m.get("content") or "").strip()
+            if content:
+                convo.append(f"{role.upper()}: {content}")
+        contexto = "\n".join(convo)
+
+        instrucciones = (
+            "Eres un asesor en español. Da recomendaciones claras y accionables.\n"
+            "- Basarte en el contexto reciente del chat (no inventes datos).\n"
+            "- Estructura en pasos, quick wins y métricas a monitorear.\n"
+            "- Incluye riesgos/consideraciones y alternativas.\n"
+            "- Si faltan datos, indica qué pedir o calcular del documento.\n"
+        )
+        prompt_llm = (
+            f"{instrucciones}\n\nPregunta del usuario:\n{prompt}\n\n"
+            f"=== CONTEXTO RECIENTE ===\n{contexto}\n=== FIN CONTEXTO ==="
+        )
+
+        # Usa el motor de análisis existente para generar la asesoría
+        resp = analyze_document_with_groq(prompt_llm, "asesoria_estrategica")
+        if not resp or not resp.strip():
+            return ""
+
+        # Redacción final por el editor (segunda IA)
+        try:
+            resp = rewrite_with_editor(resp, "Formato claro, pasos accionables y métricas.")
+        except Exception:
+            pass
+
+        return resp.strip()
+    except Exception:
+        return ""
+
+def chunk_text(text: str, max_chars: int = 1200, overlap: int = 200) -> list[str]:
+    """Divide texto en trozos con solapamiento para recuperación."""
+    t = (text or "")
+    if len(t) <= max_chars:
+        return [t]
+    chunks = []
+    start = 0
+    while start < len(t):
+        end = min(start + max_chars, len(t))
+        chunks.append(t[start:end])
+        if end == len(t):
+            break
+        start = max(0, end - overlap)
+    return chunks
+
+def _spanish_stopwords() -> set[str]:
+    return {
+        "el","la","los","las","un","una","unos","unas","de","del","al","y","o","u",
+        "que","qué","cuál","cual","donde","dónde","como","cómo","en","por","para",
+        "a","con","sin","se","su","sus","mi","mis","tu","tus","lo","le","les","es",
+        "hay","tengo","tienes","tener","esto","eso","aqui","aquí","alli","allí"
+    }
+
+import difflib
+
+def extract_keywords(query: str) -> list[str]:
+    """Extrae términos útiles, sin stopwords, para recuperar contexto."""
+    q = normalize_str(query or "")
+    stops = _spanish_stopwords()
+    return [t for t in q.split() if t not in stops and len(t) > 2]
+
+def fuzzy_contains(haystack: str, needle: str, threshold: float = 0.82) -> bool:
+    """Coincidencia difusa acento-insensible y minúsculas."""
+    h = normalize_str(haystack)
+    n = normalize_str(needle)
+    if n in h:
+        return True
+    # Similaridad global como respaldo
+    return difflib.SequenceMatcher(None, h, n).ratio() >= threshold
+
+def _score_chunk(norm_chunk: str, norm_query: str, name: str) -> int:
+    """Puntuación por presencia exacta y difusa en chunk y nombre del archivo."""
+    tokens = extract_keywords(norm_query)
+    score = 0
+    for t in tokens:
+        # Exacta en chunk
+        if t in norm_chunk:
+            score += 2
+        # Difusa en chunk
+        elif fuzzy_contains(norm_chunk, t, 0.88):
+            score += 1
+        # Presencia en nombre del archivo ponderada
+        if t in normalize_str(name) or fuzzy_contains(name, t, 0.88):
+            score += 3
+    return score
+
+def sync_user_files_from_disk(user_id: int):
+    """Escanea user_uploads/{user_id} y uploads/{user_id}, registra en BD los faltantes."""
+    base_dirs = [os.path.join("user_uploads", str(user_id)), os.path.join("uploads", str(user_id))]
     # Archivos ya en BD por path
     try:
         existing = db.get_user_files(user_id)
@@ -921,70 +1058,70 @@ def sync_user_files_from_disk(user_id: int):
     except Exception:
         existing_paths = set()
 
-    # Mapeo de tipos (igual que en save_uploaded_file)
     ext_map = {
         'pdf': 'pdf', 'docx': 'word', 'doc': 'word', 'txt': 'text',
         'md': 'markdown', 'xlsx': 'excel', 'xls': 'excel', 'csv': 'csv',
         'jpg': 'image', 'jpeg': 'image', 'png': 'image', 'gif': 'image'
     }
 
-    for name in os.listdir(base_dir):
-        path = os.path.join(base_dir, name)
-        if not os.path.isfile(path):
+    for base_dir in base_dirs:
+        if not os.path.isdir(base_dir):
             continue
-        if path in existing_paths:
-            continue
+        for name in os.listdir(base_dir):
+            path = os.path.join(base_dir, name)
+            if not os.path.isfile(path):
+                continue
+            if path in existing_paths:
+                continue
 
-        ext = name.split('.')[-1].lower()
-        file_type = ext_map.get(ext, 'unknown')
-        if file_type == 'unknown':
-            continue
+            ext = name.split('.')[-1].lower()
+            file_type = ext_map.get(ext, 'unknown')
+            if file_type == 'unknown':
+                continue
 
-        try:
-            with open(path, "rb") as f:
-                data = f.read()
-            content = ""
-            analysis = ""
-            if file_type in ['pdf', 'word']:
-                processor = FileProcessor()
-                result = processor.process_file(data, name)
-                content = (result.get('content') or "")[:5000]
-            else:
-                try:
-                    content = data.decode('utf-8')[:5000]
-                except Exception:
-                    content = data.decode('latin-1', errors='ignore')[:5000]
+            try:
+                with open(path, "rb") as f:
+                    data = f.read()
+                content = ""
+                analysis = ""
+                if file_type in ['pdf', 'word']:
+                    processor = FileProcessor()
+                    result = processor.process_file(data, name)
+                    content = (result.get('content') or "")[:8000]
+                else:
+                    try:
+                        content = data.decode('utf-8', errors='ignore')[:8000]
+                    except Exception:
+                        content = data.decode('latin-1', errors='ignore')[:8000]
 
-            if content and len(content.strip()) > 50:
-                # Opcional: análisis con Groq si tienes clave
-                try:
-                    analysis = analyze_document_with_groq(content, name)
-                except Exception:
+                if content and len(content.strip()) > 50:
+                    try:
+                        analysis = analyze_document_with_groq(content, name)
+                    except Exception:
+                        analysis = f"Documento indexado: {name}"
+                else:
                     analysis = f"Documento indexado: {name}"
-            else:
-                analysis = f"Documento indexado: {name}"
 
-            db.save_file(
-                user_id=user_id,
-                filename=name,
-                file_path=path,
-                file_type=file_type,
-                file_size=os.path.getsize(path),
-                content_extracted=content,
-                analysis_summary=analysis[:350]
-            )
-        except Exception:
-            # No se detiene la indexación por un archivo problemático
-            continue
+                db.save_file(
+                    user_id=user_id,
+                    filename=name,
+                    file_path=path,
+                    file_type=file_type,
+                    file_size=os.path.getsize(path),
+                    content_extracted=content,
+                    analysis_summary=(analysis or "")[:350]
+                )
+            except Exception:
+                continue
 
-def search_user_documents(user_id: int | None, query: str):
-    """Busca coincidencias en los archivos del usuario (score simple)."""
-    q = normalize_str(query or "")
+def search_user_documents(user_id: int, query: str):
+    """Busca en BD por nombre y contenido, acento-insensible."""
+    q = normalize_str((query or "").strip())
     if not q:
         return []
 
     try:
-        files = db.get_user_files(user_id) if user_id else []
+        files = db.get_user_files(user_id)
     except Exception:
         files = []
 
@@ -1001,43 +1138,167 @@ def search_user_documents(user_id: int | None, query: str):
             results.append((score, f))
 
     results.sort(key=lambda x: x[0], reverse=True)
-    if results:
-        return [r[1] for r in results]
-
-    # Si no hay resultados en la BD del usuario, intentar buscar en disco (fallback)
-    try:
-        global_hits = search_files_on_disk(query)
-    except Exception:
-        global_hits = []
-    return global_hits
+    return [r[1] for r in results]
 
 def maybe_answer_doc_query(prompt: str, user_id: int | None):
-    """
-    Intercepta preguntas del tipo "dónde se encuentra X" y responde con rutas
-    a los archivos que coincidan con X entre los archivos subidos por el usuario.
-    """
-    text = (prompt or "").strip()
+    """Detecta preguntas sobre inventario/ubicación y arma respuesta local."""
+    text = (prompt or "")
     norm = normalize_str(text)
     intents = [
-        "donde se encuentra", "dónde se encuentra", "donde esta", "dónde está",
-        "donde lo encuentro", "dónde lo encuentro", "donde encuentro", "dónde encuentro",
-        "dónde está", "donde está", "buscar", "encontrar"
+        "que libro", "qué libro", "que documentos", "qué documentos",
+        "que archivo", "qué archivo", "donde esta", "dónde está",
+        "donde lo encuentro", "dónde lo encuentro", "que tengo", "qué tengo",
+        "buscar", "lista de archivos", "listar archivos"
     ]
     if not any(k in norm for k in intents):
         return None
 
-    # Buscar coincidencias en archivos del usuario
+    if not user_id:
+        return "No encuentro tu sesión de usuario. Inicia sesión para buscar en tus documentos."
+
     matches = search_user_documents(user_id, text)
     if not matches:
-        return "No encuentro coincidencias en tus documentos. Prueba con el nombre exacto o sube el archivo."
+        return "No encuentro coincidencias en tus documentos. Prueba con el nombre o tema exacto."
 
     lines = []
     for f in matches[:8]:
         ruta = f.get("file_path") or f"user_uploads/{user_id}/{f.get('filename')}"
-        lines.append(f"- {f.get('filename')} (ruta: {ruta})")
+        lines.append(f"- {f.get('filename')} (lo encuentras en: {ruta})")
 
-    header = "Encontré estos documentos:\n" if len(lines) > 1 else "Encontré este documento:\n"
+    header = "Encontré estos documentos:\n" if len(matches) > 1 else "Encontré este documento:\n"
     return header + "\n".join(lines)
+
+def rewrite_with_editor(text: str, instrucciones: str | None = None) -> str:
+    """
+    Reescribe la respuesta con estilo claro en español.
+    Evita usar el motor de análisis para saludos/charla u otros mensajes generales.
+    """
+    try:
+        if not text or not text.strip():
+            return text
+
+        # No reescribir saludos/charla o textos muy cortos
+        if is_greeting_or_smalltalk(text) or len(text.strip()) < 20:
+            return text
+
+        # Limpia encabezados tipo "Análisis del Documento ..." si aparecieran
+        cleaned = re.sub(
+            r"^\s*\*\*An[aá]lisis del Documento.*?\*\*\s*",
+            "",
+            text,
+            flags=re.IGNORECASE | re.MULTILINE
+        )
+
+        # Si se requiere más estilo, puedes aplicar reglas simples aquí (sin IA)
+        return cleaned.strip()
+    except Exception:
+        return text
+
+def answer_with_docs(prompt: str, user_id: int) -> str | None:
+    """
+    Recupera trozos relevantes de los documentos del usuario y redacta
+    una respuesta usando EXCLUSIVAMENTE ese contexto. Devuelve None si no hubo buen contexto.
+    """
+    # Solo aplicamos RAG si no es saludo y la intención es de análisis
+    if is_greeting_or_smalltalk(prompt) or not is_analysis_question(prompt):
+        return None
+
+    try:
+        files = db.get_user_files(user_id)
+    except Exception:
+        files = []
+
+    norm_q = normalize_str(prompt)
+    candidates = []
+    for f in files:
+        name = f.get("filename") or ""
+        path = f.get("file_path") or f"user_uploads/{user_id}/{name}"
+        content = f.get("content_extracted") or ""
+        if not content:
+            continue
+        for ch in chunk_text(content):
+            norm_ch = normalize_str(ch)
+            score = _score_chunk(norm_ch, norm_q, name)
+            if score > 0:
+                candidates.append((score, ch, name, path))
+
+    if not candidates:
+        # No hay contexto suficiente: sugerir posibles archivos por nombre
+        suggestions = search_user_documents(user_id, prompt)
+        if suggestions:
+            posibles = "\n".join([f"- {s.get('filename')} (ruta: {s.get('file_path')})" for s in suggestions[:6]])
+            return (
+                "No encuentro texto relevante en los documentos actuales para responder.\n"
+                "Podría estar en alguno de estos archivos:\n" + posibles
+            )
+        return None
+
+    # Ordenar por relevancia y tomar top-N, combinando evidencia
+    candidates.sort(key=lambda x: x[0], reverse=True)
+    top = candidates[:8]
+
+    # Umbral mínimo de confianza: al menos un match fuerte o varios débiles
+    if top[0][0] < 3 and len(top) < 3:
+        suggestions = search_user_documents(user_id, prompt)
+        if suggestions:
+            posibles = "\n".join([f"- {s.get('filename')} (ruta: {s.get('file_path')})" for s in suggestions[:6]])
+            return (
+                "El contexto recuperado es insuficiente para una respuesta fiable.\n"
+                "Podría estar en:\n" + posibles
+            )
+        return None
+
+    # Construir contexto con múltiples fuentes
+    contexto = "\n\n".join([f"Fuente: {n}\nRuta: {p}\nContenido:\n{ch}" for _, ch, n, p in top])
+    fuentes_unicas = []
+    vistos = set()
+    for _, _, n, p in top:
+        key = (n, p)
+        if key not in vistos:
+            vistos.add(key)
+            fuentes_unicas.append((n, p))
+
+    instrucciones = (
+        "Responde EXCLUSIVAMENTE usando el texto provisto en CONTEXTO.\n"
+        "Reglas estrictas:\n"
+        "1) Usa SOLO el texto dado de los documentos.\n"
+        "2) Si hay información relacionada en varios documentos, combina la evidencia y cita sus nombres.\n"
+        "3) Si el documento no menciona explícitamente el tema, dilo claramente.\n"
+        "4) Considera variaciones ortográficas/semánticas al interpretar el texto, pero NO inventes información.\n"
+        "5) Si no hay información suficiente, sugiere posibles archivos donde podría estar la respuesta.\n"
+        "- Cita al final las 'Fuentes' con nombre y ruta.\n"
+        "- Si el contexto entra en conflicto, explica la discrepancia brevemente.\n"
+    )
+    prompt_llm = (
+        f"{instrucciones}\n\nPregunta del usuario:\n{prompt}\n\n=== CONTEXTO ===\n{contexto}\n=== FIN CONTEXTO ==="
+    )
+
+    try:
+        respuesta = analyze_document_with_groq(prompt_llm, "consulta_documentos")
+    except Exception:
+        respuesta = None
+
+    if not respuesta or not respuesta.strip():
+        # Fallback: sin respuesta, sugerir archivos por nombre
+        suggestions = search_user_documents(user_id, prompt)
+        if suggestions:
+            posibles = "\n".join([f"- {s.get('filename')} (ruta: {s.get('file_path')})" for s in suggestions[:6]])
+            return (
+                "No fue posible redactar una respuesta solo con el contexto disponible.\n"
+                "Podría estar en:\n" + posibles
+            )
+        return None
+
+    # Añadir sección de fuentes (combinadas) y pasar por editor ligero (sin formato de análisis)
+    fuentes_txt = "\n".join([f"- {n} (ruta: {p})" for n, p in fuentes_unicas])
+    respuesta_final = respuesta.strip() + "\n\nFuentes:\n" + fuentes_txt
+
+    try:
+        respuesta_final = rewrite_with_editor(respuesta_final, "Mantén nombres y rutas exactas; sin encabezados tipo informe.")
+    except Exception:
+        pass
+
+    return respuesta_final
 
 # --- PROCESAMIENTO DE ECUACIONES ---
 def render_latex_in_message(content):
@@ -1125,17 +1386,73 @@ def chat_page():
     
     st.markdown('</div>', unsafe_allow_html=True)
     
-    # Input del chat
-    if prompt := st.chat_input("Escribe tu mensaje..."):
+    # Input del chat (UNA sola vez, con key única)
+    prompt = st.chat_input(
+        "Escribe tu mensaje...",
+        key=f"chat_input_{st.session_state.get('user_id','anon')}_{st.session_state.get('current_chat','default')}"
+    )
+    if prompt:
+        # Muestra el mensaje del usuario de inmediato
+        with st.chat_message("user"):
+            st.markdown(prompt)
         st.session_state.messages.append({"role": "user", "content": prompt})
 
-        # Respuesta local sobre inventario/ubicación de documentos (antes de Groq)
-        local = maybe_answer_doc_query(prompt, st.session_state.get("user_id"))
-        if local:
-            st.session_state.messages.append({"role": "assistant", "content": local})
+        # 0) Saludos / charla general -> NO retornar, caer al generador IA general
+        if is_greeting_or_smalltalk(prompt):
+            pass  # sigue al bloque de generación general más abajo
+
+        else:
+            # 1) Inventario/ubicación simple (por nombre y rutas)
+            local = maybe_answer_doc_query(prompt, st.session_state.get("user_id"))
+            if local:
+                try:
+                    local = rewrite_with_editor(local, "Mantén el listado y rutas tal cual.")
+                except Exception:
+                    pass
+                st.session_state.messages.append({"role": "assistant", "content": local})
+                save_current_chat()
+                st.rerun()
+                return
+
+            # 2) Análisis basado en documentos (RAG) solo si la intención lo requiere
+            if st.session_state.get("user_id") and is_analysis_question(prompt):
+                doc_answer = answer_with_docs(prompt, st.session_state.user_id)
+                if doc_answer:
+                    st.session_state.messages.append({"role": "assistant", "content": doc_answer})
+                    save_current_chat()
+                    st.rerun()
+                    return
+
+            # 3) Preguntas de consejo/explicación con contexto reciente del chat
+            if is_advice_question(prompt):
+                advice = generate_advice_response(
+                    prompt,
+                    st.session_state.get("user_id"),
+                    st.session_state.messages
+                )
+                if advice:
+                    st.session_state.messages.append({"role": "assistant", "content": advice})
+                    save_current_chat()
+                    st.rerun()
+                    return
+
+        with st.chat_message("assistant"):
+            message_placeholder = st.empty()
+            full_response = ""
+            # ... existing code ...
+
+            # Solo reescribir si la pregunta es de análisis o consejo (no saludos)
+            try:
+                if is_analysis_question(prompt) or is_advice_question(prompt):
+                    final = rewrite_with_editor(full_response)
+                    if final:
+                        full_response = final
+            except Exception:
+                pass
+
+            message_placeholder.markdown(full_response)
+            st.session_state.messages.append({"role": "assistant", "content": full_response})
             save_current_chat()
-            st.rerun()
-            return
         
         with st.chat_message("assistant"):
             message_placeholder = st.empty()
@@ -1198,6 +1515,14 @@ def chat_page():
                         # Si no hubo contenido, informar
                         if not full_response.strip():
                             full_response = "La IA no devolvió contenido. Revisa el modelo o reintenta."
+                        # Solo reescribir si la pregunta NO es saludo y se espera formato cuidado
+                        try:
+                            if is_analysis_question(prompt) or is_advice_question(prompt):
+                                final = rewrite_with_editor(full_response)
+                                if final:
+                                    full_response = final
+                        except Exception:
+                            pass
                         final_response = render_latex_in_message(full_response)
                         message_placeholder.markdown(final_response, unsafe_allow_html=True)
                     else:
@@ -1250,14 +1575,15 @@ def image_page():
                 st.subheader("📋 Análisis de la Imagen")
                 st.write(analysis)
                 
-                # Guardar análisis si el usuario está autenticado
+                # Reescribir análisis y guardar si el usuario está autenticado
+                edited_analysis = rewrite_with_editor(analysis, "Mantén el análisis técnico pero hazlo más claro y conciso.")
                 if st.session_state.get("user_id"):
                     try:
                         image_disk_path = f"uploads/{st.session_state.user_id}/{uploaded_file.name}"
                         db.save_image_analysis(
                             user_id=st.session_state.user_id,
                             image_path=image_disk_path,
-                            analysis_result=analysis,
+                            analysis_result=edited_analysis,
                             model_used=GROQ_VISION_MODEL
                         )
                         st.success("✅ Análisis guardado en tu historial")
@@ -1491,12 +1817,12 @@ def main():
             st.session_state.user_id = user_info.get("id")
 
     # Si tenemos user_id, precargar lista de archivos del usuario
-    if st.session_state.get("user_id") and "user_files" not in st.session_state:
+    if st.session_state.get("user_id") and not st.session_state.get("files_synced"):
         try:
             sync_user_files_from_disk(st.session_state.user_id)
             st.session_state.user_files = db.get_user_files(st.session_state.user_id)
         except Exception:
-            st.session_state.user_files = []
+            pass
         st.session_state.files_synced = True
 
     # Navegación desde sidebar

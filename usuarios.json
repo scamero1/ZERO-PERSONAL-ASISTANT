@@ -63,5 +63,11 @@
         "clave": "Qaz7xsw2*",
         "rol": "usuario",
         "nfc_uid": null
+    },
+    "Prueba": {
+        "clave": "Prueba",
+        "rol": "usuario",
+        "nfc_uid": null,
+        "fecha_registro": "2025-10-08 22:55:42"
     }
 }
