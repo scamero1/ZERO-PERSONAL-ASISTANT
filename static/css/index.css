@@ -25,17 +25,19 @@ body {
 .shape-left {
   width: 480px;
   height: 480px;
-  top: -200px;
+  top: -400px;
   left: -250px;
   animation: moveL 5s ease-in-out infinite;
+  animation-delay: 2s;
 }
 
 .shape-right {
   width: 550px;
   height: 550px;
   bottom: -250px;
-  right: -350px;
+  right: -450px;
   animation: moveR 5s ease-in-out infinite;
+  animation-delay: 2s;
 }
 
 /* === Contenedor principal === */
@@ -98,11 +100,18 @@ body {
   font-size: 2rem;
   margin-bottom: 0.5rem;
   text-align: center;
-  background: linear-gradient(90deg, purple, white);
+  background: linear-gradient(
+  to right
+  rgb(91, 44, 131),
+  rgb(132, 97, 163),
+  rgb(173, 151, 195),
+  rgb(214, 203, 225),
+  rgb(255, 255, 255),
+  );
   background-clip: text;
   color: transparent;
   background-size: 200% auto;
-  animation: gradient-blink 5s linear infinite alternate;
+  animation: gradient-blink 3s linear infinite;
 }
 
 .form p {
@@ -217,22 +226,21 @@ body {
 
 @keyframes moveL {
   0% {left: -300px;}
-  20% {background:#2b0b3a}
+  20% {background:#5b2c83}
   40% {background:transparent}
-  60% {background:#2b0b3a}
-  100% {left: 10000px; background:transparent}
+  60% {background:#5b2c83}
+  100% {left: 800px; background:transparent}
 }
 
 @keyframes moveR {
   0% {right: -400px;}
-  20% {background:#2b0b3a}
+  20% {background:#5b2c83}
   40% {background:transparent}
-  60% {background:#2b0b3a}
-  100% {right: 10000px; background:transparent}
+  60% {background:#5b2c83}
+  100% {right: 800px; background:transparent}
 }
 
 @keyframes gradient-blink {
-  0% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
+  0% { background-position: 200% 50%; }
   100% { background-position: 0% 50%; }
 }
