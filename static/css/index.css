@@ -17,7 +17,7 @@ body {
 .shape {
   position: absolute;
   border-radius: 50%;
-  background: radial-gradient(circle at center, #2b0b3a, #2b0b3a);
+  background: radial-gradient(circle at center, transparent , #2b0b3a);
   filter: blur(60px);
   opacity: 0.8;
 }
@@ -219,7 +219,7 @@ body {
 }
 
 @keyframes moveL {
-  0% {left: -300px; background:#5b2c83}
+  0% {left: -50%; background:#5b2c83}
   20% {background:#5b2c83}
   40% {background:transparent}
   60% {background:#5b2c83}
@@ -227,7 +227,7 @@ body {
 }
 
 @keyframes moveR {
-  0% {right: -400px; background:#5b2c83}
+  0% {right: -50%; background:#5b2c83}
   20% {background:#5b2c83}
   40% {background:transparent}
   60% {background:#5b2c83}
