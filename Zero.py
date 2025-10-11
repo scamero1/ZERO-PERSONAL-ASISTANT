@@ -18,23 +18,17 @@ import io
 import re
 from datetime import datetime
 import unicodedata
-
-# Añadidos para enviar emails
 import smtplib
 from email.message import EmailMessage
-
 from database import ZeroDatabase
 from file_processor import FileProcessor
 
 db = ZeroDatabase()
 
-# Load environment variables
 load_dotenv()
 
-# Email por defecto para PQRS (puede sobrescribirse con la variable de entorno PQRS_EMAIL)
 PQRS_DEFAULT_EMAIL = os.getenv("PQRS_EMAIL", "soporte@zero-va.com")
 
-# Get API key from environment
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 if not GROQ_API_KEY:
     st.error("GROQ_API_KEY no encontrada en las variables de entorno")
@@ -53,14 +47,12 @@ STREAM_HEADERS = {
 }
 
 def normalize_str(s: str) -> str:
-    """Convierte a minúsculas y quita acentos para comparar."""
     s = (s or "")
     s = s.lower()
     s = unicodedata.normalize("NFD", s)
     return "".join(ch for ch in s if unicodedata.category(ch) != "Mn")
 
 def safe_text(text: str) -> str:
-    """Repara textos con problemas de encoding"""
     if text is None:
         return ""
     if not isinstance(text, str):
@@ -70,7 +62,6 @@ def safe_text(text: str) -> str:
     except Exception:
         return text
 
-# --- INICIALIZACIÓN DE ESTADO ---
 def initialize_session_state():
     default_states = {
         "autenticado": False,
@@ -91,13 +82,11 @@ def initialize_session_state():
 
 initialize_session_state()
 
-# --- DISEÑO ZERO MEJORADO ---
 def load_css():
     st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
         
-        /* Valores por defecto (modo oscuro) */
         :root {
             --primary-bg: #0a0a0a;
             --secondary-bg: #111111;
@@ -121,7 +110,6 @@ def load_css():
             --error: #ef4444;
         }
 
-        /* Modo claro: sobreescribe variables cuando el sistema lo prefiera */
         @media (prefers-color-scheme: light) {
             :root {
                 --primary-bg: #f8fafc;
@@ -146,7 +134,6 @@ def load_css():
                 --error: #dc2626;
             }
 
-            /* Ajustes secundarios para modo claro */
             .stApp {
                 color: var(--text-primary);
             }
@@ -164,7 +151,6 @@ def load_css():
             font-family: 'Plus Jakarta Sans', sans-serif;
         }
 
-        /* Sidebar elegante */
         .css-1d391kg, .css-1lcbmhc {
             background: var(--sidebar-bg) !important;
             border-right: 1px solid var(--border-color);
@@ -176,28 +162,25 @@ def load_css():
             margin-bottom: 1.5rem;
         }
 
-        /* Reducir espacio del header y del gap interno para acercarlo al contenido siguiente */
         .main-header {
             background: var(--secondary-bg);
-            padding: 0.6rem 1.2rem;   /* menos padding vertical */
+            padding: 0.6rem 1.2rem;
             border-bottom: 1px solid var(--border-color);
-            margin-bottom: 0.2rem;    /* pequeño espacio entre header y chat */
+            margin-bottom: 0.2rem;
         }
         .main-header > div {
             display: flex;
             align-items: center;
-            gap: 0.5rem;              /* gap más pequeño entre icono y texto */
+            gap: 0.5rem;
         }
 
-        /* Acercar el chat-container al header */
         .chat-container {
             background: var(--primary-bg);
-            margin-top: 0;                        /* asegurar sin margen extra */
-            min-height: calc(100vh - 72px);      /* ajustar cálculo para nuevo header */
+            margin-top: 0;
+            min-height: calc(100vh - 72px);
             padding: 0;
         }
 
-        /* Botones morados */
         .stButton > button {
             border-radius: 12px;
             padding: 0.875rem 1.5rem;
@@ -233,7 +216,6 @@ def load_css():
             transform: translateY(-2px) !important;
         }
 
-        /* Lista de chats */
         .chat-list {
             display: flex;
             flex-direction: column;
@@ -277,7 +259,6 @@ def load_css():
             text-overflow: ellipsis;
         }
 
-        /* Archivos en sidebar */
         .file-item {
             padding: 0.75rem;
             border-radius: 8px;
@@ -305,7 +286,6 @@ def load_css():
             color: var(--text-muted);
         }
 
-        /* Área principal */
         .main-header {
             background: var(--secondary-bg);
             padding: 1.5rem 2rem;
@@ -319,13 +299,13 @@ def load_css():
             padding: 0;
         }
 
-        /* Mensajes elegantes */
         .message {
             padding: 1.5rem 2rem;
             animation: slideIn 0.4s ease;
         }
 
         .chat-list {{
+
             max-height: 40vh;
             overflow-y: auto;
             margin-bottom: 1rem;
@@ -364,7 +344,6 @@ def load_css():
             color: rgba(255,255,255,0.8);
         }}
 
-        /* Estilos para archivos */
         .file-item {{
             padding: 0.75rem;
             margin: 0.5rem 0;
@@ -413,8 +392,6 @@ def load_css():
 
 load_css()
 
-# --- INICIALIZACIÓN DE SERVICIOS ---
-# Twilio (para verificación SMS)
 try:
     twilio_client = Client(
         os.getenv("TWILIO_ACCOUNT_SID"),
@@ -423,7 +400,6 @@ try:
 except Exception as e:
     st.warning(f"No se pudo inicializar Twilio: {e}")
 
-# --- INICIALIZACIÓN DE ESTADO ---
 def initialize_session_state():
     if "autenticado" not in st.session_state:
         st.session_state.autenticado = False
@@ -448,15 +424,11 @@ def initialize_session_state():
 
 initialize_session_state()
 
-# --- GROQ HELPERS ---
 def _system_prompt():
-    # Crear prompt personalizado basado en el contexto del usuario
     base_prompt = "Eres un asistente AI llamado Zero. Sé conciso, profesional y útil."
     
-    # Agregar contexto de archivos si existe
     if st.session_state.get("user_context"):
         context_info = "\n\nContexto personalizado del usuario:\n"
-        # Últimos 5 contextos
         for ctx in st.session_state.user_context[-5:]:
             context_info += f"- {ctx['context_key']}: {ctx['context_value'][:200]}...\n"
         base_prompt += context_info
@@ -464,10 +436,6 @@ def _system_prompt():
     return {"role": "system", "content": base_prompt}
 
 def groq_chat_stream(history_messages, *, model=None, max_tokens=1200, temperature=0.7):
-    """
-    Streaming SSE con requests.iter_lines() (sin SDK extra).
-    Devuelve un generador de "delta" (fragmentos de texto) como en OpenAI.
-    """
     m = model or GROQ_TEXT_MODEL
     payload = {
         "model": m,
@@ -490,7 +458,6 @@ def groq_chat_stream(history_messages, *, model=None, max_tokens=1200, temperatu
                         obj = json.loads(data)
                         delta = obj["choices"][0]["delta"].get("content")
                         if delta:
-                            # FIX ENCODING por si llega interpretado raro
                             yield safe_text(delta)
                     except Exception:
                         continue
@@ -500,9 +467,6 @@ def groq_chat_stream(history_messages, *, model=None, max_tokens=1200, temperatu
         yield safe_text(f"⚠️ Error en streaming: {e}")
 
 def groq_chat_nonstream(history_messages, *, model=None, max_tokens=1200, temperature=0.7):
-    """
-    Llamada normal (no streaming) al endpoint OpenAI-compatible de Groq.
-    """
     m = model or GROQ_TEXT_MODEL
     payload = {
         "model": m,
@@ -519,9 +483,7 @@ def groq_chat_nonstream(history_messages, *, model=None, max_tokens=1200, temper
     except Exception as e:
         return safe_text(f"⚠️ Error en la conexión: {e}")
 
-# --- FUNCIONES UTILITARIAS UI ---
 def display_message(role, content):
-    """Muestra un mensaje en el chat con el estilo adecuado."""
     if role == "assistant":
         clean_content = safe_text(str(content)).replace("Zero:", "").strip()
         st.markdown(
@@ -535,12 +497,10 @@ def display_message(role, content):
         )
 
 def save_current_chat():
-    """Guarda el chat actual en el historial y DB."""
     if st.session_state.messages and st.session_state.get("usuario") and st.session_state.get("user_id"):
         first_message = st.session_state.messages[0]["content"] if st.session_state.messages else "Nuevo chat"
         title = first_message[:30] + "..." if len(first_message) > 30 else first_message
         
-        # Actualizar en session_state
         if st.session_state.usuario not in st.session_state.chat_history:
             st.session_state.chat_history[st.session_state.usuario] = {}
         st.session_state.chat_history[st.session_state.usuario][st.session_state.current_chat] = {
@@ -548,9 +508,7 @@ def save_current_chat():
             "messages": st.session_state.messages.copy(),
         }
 
-        # Asegurar que el chat exista en DB
         try:
-            # Intentar actualizar título; si el chat no existe, crearlo
             db.update_chat_title(st.session_state.current_chat, safe_text(title))
         except Exception:
             pass
@@ -560,7 +518,6 @@ def save_current_chat():
         else:
             db.update_chat_title(st.session_state.current_chat, safe_text(title))
         
-        # Guardar mensajes (nota: simple, puede duplicar si llamas muchas veces)
         for message in st.session_state.messages:
             db.add_message(
                 st.session_state.current_chat,
@@ -569,17 +526,13 @@ def save_current_chat():
             )
 
 def load_chat(chat_id):
-    """Carga un chat del historial."""
     if "usuario" in st.session_state and chat_id in st.session_state.chat_history.get(st.session_state.usuario, {}):
         st.session_state.current_chat = chat_id
         st.session_state.messages = st.session_state.chat_history[st.session_state.usuario][chat_id]["messages"].copy()
         st.rerun()
 
-# --- SIDEBAR ZERO MEJORADO ---
 def create_sidebar():
-    """Crea la barra lateral con diseño Zero mejorado"""
     with st.sidebar:
-        # Header del sidebar
         username = st.session_state.get('usuario') or 'Invitado'
         st.markdown(f"""
             <div class="sidebar-header">
@@ -593,13 +546,10 @@ def create_sidebar():
             </div>
         """, unsafe_allow_html=True)
 
-        # --- NUEVO: Selección múltiple de conversaciones ---
         if "selected_chats" not in st.session_state:
             st.session_state.selected_chats = set()
 
-        # Botón para eliminar conversaciones seleccionadas
         if st.session_state.selected_chats:
-            # Usar una sola columna para evitar el texto vertical
             col_del = st.columns([1])[0]
             with col_del:
                 btn_style = """
@@ -622,7 +572,7 @@ def create_sidebar():
                 st.markdown(btn_style, unsafe_allow_html=True)
                 if st.button("🗑️ Eliminar seleccionadas", key="delete_selected_chats", use_container_width=True, help="Eliminar todas las conversaciones seleccionadas", type="secondary"):
                     for chat_id in list(st.session_state.selected_chats):
-                        db.delete_chat(chat_id, st.session_state.user_id)  # <--- Cambia aquí
+                        db.delete_chat(chat_id, st.session_state.user_id)
                         st.session_state.selected_chats.remove(chat_id)
                     st.session_state.chat_history = {}
                     st.session_state.messages = []
@@ -630,14 +580,12 @@ def create_sidebar():
                     st.rerun()
                 st.markdown(f"<span style='color:var(--text-muted);font-size:0.9rem;'>({len(st.session_state.selected_chats)} seleccionadas)</span>", unsafe_allow_html=True)
 
-        # Botón nuevo chat morado
         if st.button("Nuevo Chat", key="new_chat_btn", use_container_width=True, type="primary"):
             save_current_chat()
             st.session_state.current_chat = str(uuid.uuid4())
             st.session_state.messages = []
             st.rerun()
 
-        # Sección de chats anteriores
         st.markdown('<div class="sidebar-section">', unsafe_allow_html=True)
         st.markdown('<div class="section-title">Conversaciones</div>', unsafe_allow_html=True)
 
@@ -651,7 +599,6 @@ def create_sidebar():
                         title_val = chat.get('title') or "Nuevo chat"
                         preview = title_val[:25] + "..." if len(title_val) > 25 else title_val
 
-                        # Checkbox para seleccionar
                         col1, col2 = st.columns([1, 8])
                         with col1:
                             checked = chat['id'] in st.session_state.selected_chats
@@ -686,7 +633,6 @@ def create_sidebar():
 
         st.markdown('</div>', unsafe_allow_html=True)
         
-        # Sección de archivos
         st.markdown('<div class="sidebar-section">', unsafe_allow_html=True)
         st.markdown('<div class="section-title">Archivos</div>', unsafe_allow_html=True)
         
@@ -711,7 +657,6 @@ def create_sidebar():
         
         st.markdown('</div>', unsafe_allow_html=True)
         
-        # Navegación principal con botones morados
         st.markdown('<div class="sidebar-section">', unsafe_allow_html=True)
         st.markdown('<div class="section-title">Navegación</div>', unsafe_allow_html=True)
         
@@ -723,7 +668,6 @@ def create_sidebar():
             st.session_state.current_page = "files"
             st.rerun()
 
-        # NUEVO: Botón PQRS
         if st.button("PQRS", key="nav_pqrs", use_container_width=True, type="primary"):
             st.session_state.current_page = "pqrs"
             st.rerun()
@@ -735,9 +679,7 @@ def create_sidebar():
 
         st.markdown('</div>', unsafe_allow_html=True)
 
-        # Footer del sidebar
         st.markdown("---")
-        # Cerrar sesión en la misma pestaña (target="_self")
         st.markdown(
             '''
             <a href="https://zero-va.com/logout" target="_self"
@@ -750,9 +692,7 @@ def create_sidebar():
             unsafe_allow_html=True
         )
 
-# --- SISTEMA DE ARCHIVOS ---
 def analyze_document_with_groq(content, filename):
-    """Analiza documentos con Groq"""
     try:
         content_preview = content[:3000]
         
@@ -794,7 +734,6 @@ def analyze_document_with_groq(content, filename):
         return f"Documento procesado: {filename}"
 
 def analyze_image_with_groq(image_base64, filename):
-    """Analiza imágenes con Groq Vision"""
     try:
         payload = {
             "model": GROQ_VISION_MODEL,
@@ -843,7 +782,6 @@ Elementos notables o importantes"""
         return f"Imagen procesada: {filename}"
 
 def save_uploaded_file(uploaded_file):
-    """Guarda y procesa archivos subidos"""
     try:
         file_type = uploaded_file.name.split('.')[-1].lower()
         file_types = {
@@ -907,10 +845,7 @@ def save_uploaded_file(uploaded_file):
     except Exception as e:
         return None, f"Error procesando archivo: {str(e)}"
 
-# --- INDEXACIÓN Y BÚSQUEDA DE DOCUMENTOS ---
-
 def is_advice_question(prompt: str) -> bool:
-    """Detecta si el usuario pide consejo/guía/explicación práctica (cualquier tema)."""
     norm = normalize_str(prompt)
     intents = [
         "como puedo", "cómo puedo", "como hacer", "cómo hacer",
@@ -925,7 +860,6 @@ def is_advice_question(prompt: str) -> bool:
     return any(k in norm for k in intents)
 
 def is_greeting_or_smalltalk(prompt: str) -> bool:
-    """Detecta saludos/charla corta para usar IA general sin RAG ni editor."""
     norm = normalize_str(prompt)
     intents = [
         "hola", "buenos dias", "buenas tardes", "buenas noches",
@@ -937,7 +871,6 @@ def is_greeting_or_smalltalk(prompt: str) -> bool:
     return any(k in norm for k in intents)
 
 def is_analysis_question(prompt: str) -> bool:
-    """Detecta si el usuario solicita un análisis/estudio basado en documentos."""
     norm = normalize_str(prompt)
     intents = [
         "analiza", "analisis", "análisis",
@@ -951,13 +884,8 @@ def is_analysis_question(prompt: str) -> bool:
     return any(k in norm for k in intents)
 
 def generate_advice_response(prompt: str, user_id: int | None, recent_messages: list[dict]) -> str:
-    """
-    Crea una respuesta de consejo/estrategia usando el contexto reciente del chat.
-    Produce pasos accionables y consideraciones en español.
-    """
     try:
         convo = []
-        # Usa las últimas 8 intervenciones para dar contexto (incluye tu comparación previa)
         for m in recent_messages[-8:]:
             role = m.get("role", "user")
             content = (m.get("content") or "").strip()
@@ -977,12 +905,10 @@ def generate_advice_response(prompt: str, user_id: int | None, recent_messages: 
             f"=== CONTEXTO RECIENTE ===\n{contexto}\n=== FIN CONTEXTO ==="
         )
 
-        # Usa el motor de análisis existente para generar la asesoría
         resp = analyze_document_with_groq(prompt_llm, "asesoria_estrategica")
         if not resp or not resp.strip():
             return ""
 
-        # Redacción final por el editor (segunda IA)
         try:
             resp = rewrite_with_editor(resp, "Formato claro, pasos accionables y métricas.")
         except Exception:
@@ -993,7 +919,6 @@ def generate_advice_response(prompt: str, user_id: int | None, recent_messages: 
         return ""
 
 def chunk_text(text: str, max_chars: int = 1200, overlap: int = 200) -> list[str]:
-    """Divide texto en trozos con solapamiento para recuperación."""
     t = (text or "")
     if len(t) <= max_chars:
         return [t]
@@ -1018,40 +943,31 @@ def _spanish_stopwords() -> set[str]:
 import difflib
 
 def extract_keywords(query: str) -> list[str]:
-    """Extrae términos útiles, sin stopwords, para recuperar contexto."""
     q = normalize_str(query or "")
     stops = _spanish_stopwords()
     return [t for t in q.split() if t not in stops and len(t) > 2]
 
 def fuzzy_contains(haystack: str, needle: str, threshold: float = 0.82) -> bool:
-    """Coincidencia difusa acento-insensible y minúsculas."""
     h = normalize_str(haystack)
     n = normalize_str(needle)
     if n in h:
         return True
-    # Similaridad global como respaldo
     return difflib.SequenceMatcher(None, h, n).ratio() >= threshold
 
 def _score_chunk(norm_chunk: str, norm_query: str, name: str) -> int:
-    """Puntuación por presencia exacta y difusa en chunk y nombre del archivo."""
     tokens = extract_keywords(norm_query)
     score = 0
     for t in tokens:
-        # Exacta en chunk
         if t in norm_chunk:
             score += 2
-        # Difusa en chunk
         elif fuzzy_contains(norm_chunk, t, 0.88):
             score += 1
-        # Presencia en nombre del archivo ponderada
         if t in normalize_str(name) or fuzzy_contains(name, t, 0.88):
             score += 3
     return score
 
 def sync_user_files_from_disk(user_id: int):
-    """Escanea user_uploads/{user_id} y uploads/{user_id}, registra en BD los faltantes."""
     base_dirs = [os.path.join("user_uploads", str(user_id)), os.path.join("uploads", str(user_id))]
-    # Archivos ya en BD por path
     try:
         existing = db.get_user_files(user_id)
         existing_paths = {f.get("file_path") for f in existing if f.get("file_path")}
@@ -1115,7 +1031,6 @@ def sync_user_files_from_disk(user_id: int):
                 continue
 
 def search_user_documents(user_id: int, query: str):
-    """Busca en BD por nombre y contenido, acento-insensible."""
     q = normalize_str((query or "").strip())
     if not q:
         return []
@@ -1141,7 +1056,6 @@ def search_user_documents(user_id: int, query: str):
     return [r[1] for r in results]
 
 def maybe_answer_doc_query(prompt: str, user_id: int | None):
-    """Detecta preguntas sobre inventario/ubicación y arma respuesta local."""
     text = (prompt or "")
     norm = normalize_str(text)
     intents = [
@@ -1169,19 +1083,13 @@ def maybe_answer_doc_query(prompt: str, user_id: int | None):
     return header + "\n".join(lines)
 
 def rewrite_with_editor(text: str, instrucciones: str | None = None) -> str:
-    """
-    Reescribe la respuesta con estilo claro en español.
-    Evita usar el motor de análisis para saludos/charla u otros mensajes generales.
-    """
     try:
         if not text or not text.strip():
             return text
 
-        # No reescribir saludos/charla o textos muy cortos
         if is_greeting_or_smalltalk(text) or len(text.strip()) < 20:
             return text
 
-        # Limpia encabezados tipo "Análisis del Documento ..." si aparecieran
         cleaned = re.sub(
             r"^\s*\*\*An[aá]lisis del Documento.*?\*\*\s*",
             "",
@@ -1189,17 +1097,11 @@ def rewrite_with_editor(text: str, instrucciones: str | None = None) -> str:
             flags=re.IGNORECASE | re.MULTILINE
         )
 
-        # Si se requiere más estilo, puedes aplicar reglas simples aquí (sin IA)
         return cleaned.strip()
     except Exception:
         return text
 
 def answer_with_docs(prompt: str, user_id: int) -> str | None:
-    """
-    Recupera trozos relevantes de los documentos del usuario y redacta
-    una respuesta usando EXCLUSIVAMENTE ese contexto. Devuelve None si no hubo buen contexto.
-    """
-    # Solo aplicamos RAG si no es saludo y la intención es de análisis
     if is_greeting_or_smalltalk(prompt) or not is_analysis_question(prompt):
         return None
 
@@ -1223,7 +1125,6 @@ def answer_with_docs(prompt: str, user_id: int) -> str | None:
                 candidates.append((score, ch, name, path))
 
     if not candidates:
-        # No hay contexto suficiente: sugerir posibles archivos por nombre
         suggestions = search_user_documents(user_id, prompt)
         if suggestions:
             posibles = "\n".join([f"- {s.get('filename')} (ruta: {s.get('file_path')})" for s in suggestions[:6]])
@@ -1233,11 +1134,9 @@ def answer_with_docs(prompt: str, user_id: int) -> str | None:
             )
         return None
 
-    # Ordenar por relevancia y tomar top-N, combinando evidencia
     candidates.sort(key=lambda x: x[0], reverse=True)
     top = candidates[:8]
 
-    # Umbral mínimo de confianza: al menos un match fuerte o varios débiles
     if top[0][0] < 3 and len(top) < 3:
         suggestions = search_user_documents(user_id, prompt)
         if suggestions:
@@ -1248,7 +1147,6 @@ def answer_with_docs(prompt: str, user_id: int) -> str | None:
             )
         return None
 
-    # Construir contexto con múltiples fuentes
     contexto = "\n\n".join([f"Fuente: {n}\nRuta: {p}\nContenido:\n{ch}" for _, ch, n, p in top])
     fuentes_unicas = []
     vistos = set()
@@ -1279,7 +1177,6 @@ def answer_with_docs(prompt: str, user_id: int) -> str | None:
         respuesta = None
 
     if not respuesta or not respuesta.strip():
-        # Fallback: sin respuesta, sugerir archivos por nombre
         suggestions = search_user_documents(user_id, prompt)
         if suggestions:
             posibles = "\n".join([f"- {s.get('filename')} (ruta: {s.get('file_path')})" for s in suggestions[:6]])
@@ -1289,7 +1186,6 @@ def answer_with_docs(prompt: str, user_id: int) -> str | None:
             )
         return None
 
-    # Añadir sección de fuentes (combinadas) y pasar por editor ligero (sin formato de análisis)
     fuentes_txt = "\n".join([f"- {n} (ruta: {p})" for n, p in fuentes_unicas])
     respuesta_final = respuesta.strip() + "\n\nFuentes:\n" + fuentes_txt
 
@@ -1300,9 +1196,7 @@ def answer_with_docs(prompt: str, user_id: int) -> str | None:
 
     return respuesta_final
 
-# --- PROCESAMIENTO DE ECUACIONES ---
 def render_latex_in_message(content):
-    """Convierte ecuaciones LaTeX en formato legible"""
     inline_pattern = r'\$(.*?)\$'
     block_pattern = r'\$\$(.*?)\$\$'
     
@@ -1311,11 +1205,7 @@ def render_latex_in_message(content):
     
     return content
 
-# --- PÁGINA PRINCIPAL DEL CHAT ---
 def chat_page():
-    """Página principal del chat con diseño Zero"""
-    
-    # Header
     st.markdown("""
         <div class="main-header">
             <div style="display: flex; align-items: center; gap: 1rem;">
@@ -1332,10 +1222,8 @@ def chat_page():
         </div>
     """, unsafe_allow_html=True)
     
-    # Contenedor del chat
     st.markdown('<div class="chat-container">', unsafe_allow_html=True)
     
-    # Mostrar mensajes
     if st.session_state.messages:
         for message in st.session_state.messages:
             avatar = "👤" if message["role"] == "user" else "⚡"
@@ -1353,7 +1241,6 @@ def chat_page():
                 </div>
             """, unsafe_allow_html=True)
     else:
-        # Mensaje de bienvenida
         st.markdown("""
             <div style="text-align: center; padding: 4rem 2rem; color: var(--text-muted);">
                 <div style="font-size: 6rem; margin-bottom: 2rem;">⚡</div>
@@ -1386,23 +1273,18 @@ def chat_page():
     
     st.markdown('</div>', unsafe_allow_html=True)
     
-    # Input del chat (UNA sola vez, con key única)
     prompt = st.chat_input(
         "Escribe tu mensaje...",
         key=f"chat_input_{st.session_state.get('user_id','anon')}_{st.session_state.get('current_chat','default')}"
     )
     if prompt:
-        # Muestra el mensaje del usuario de inmediato
         with st.chat_message("user"):
             st.markdown(prompt)
         st.session_state.messages.append({"role": "user", "content": prompt})
 
-        # 0) Saludos / charla general -> NO retornar, caer al generador IA general
         if is_greeting_or_smalltalk(prompt):
-            pass  # sigue al bloque de generación general más abajo
-
+            pass
         else:
-            # 1) Inventario/ubicación simple (por nombre y rutas)
             local = maybe_answer_doc_query(prompt, st.session_state.get("user_id"))
             if local:
                 try:
@@ -1414,7 +1296,6 @@ def chat_page():
                 st.rerun()
                 return
 
-            # 2) Análisis basado en documentos (RAG) solo si la intención lo requiere
             if st.session_state.get("user_id") and is_analysis_question(prompt):
                 doc_answer = answer_with_docs(prompt, st.session_state.user_id)
                 if doc_answer:
@@ -1423,7 +1304,6 @@ def chat_page():
                     st.rerun()
                     return
 
-            # 3) Preguntas de consejo/explicación con contexto reciente del chat
             if is_advice_question(prompt):
                 advice = generate_advice_response(
                     prompt,
@@ -1439,27 +1319,12 @@ def chat_page():
         with st.chat_message("assistant"):
             message_placeholder = st.empty()
             full_response = ""
-            # ... existing code ...
 
-            # Solo reescribir si la pregunta es de análisis o consejo (no saludos)
-            try:
-                if is_analysis_question(prompt) or is_advice_question(prompt):
-                    final = rewrite_with_editor(full_response)
-                    if final:
-                        full_response = final
-            except Exception:
-                pass
-
-            message_placeholder.markdown(full_response)
-            st.session_state.messages.append({"role": "assistant", "content": full_response})
-            save_current_chat()
-        
         with st.chat_message("assistant"):
             message_placeholder = st.empty()
             full_response = ""
             
             try:
-                # Mostrar animación de typing
                 message_placeholder.markdown("""
                     <div style="display: flex; align-items: center; gap: 0.5rem; color: var(--text-muted);">
                         <div style="display: flex; gap: 3px;">
@@ -1477,7 +1342,6 @@ def chat_page():
                     </style>
                 """, unsafe_allow_html=True)
                 
-                # Pre-chequeo de clave
                 if not GROQ_API_KEY:
                     full_response = "GROQ_API_KEY no configurada en el entorno de Streamlit. Verifica tu archivo .env o variables del sistema."
                     message_placeholder.markdown(full_response)
@@ -1512,10 +1376,8 @@ def chat_page():
                                                 message_placeholder.markdown(response_with_math, unsafe_allow_html=True)
                                     except:
                                         continue
-                        # Si no hubo contenido, informar
                         if not full_response.strip():
                             full_response = "La IA no devolvió contenido. Revisa el modelo o reintenta."
-                        # Solo reescribir si la pregunta NO es saludo y se espera formato cuidado
                         try:
                             if is_analysis_question(prompt) or is_advice_question(prompt):
                                 final = rewrite_with_editor(full_response)
@@ -1526,7 +1388,6 @@ def chat_page():
                         final_response = render_latex_in_message(full_response)
                         message_placeholder.markdown(final_response, unsafe_allow_html=True)
                     else:
-                        # Mensajes de error específicos y detalle
                         try:
                             body = response.text[:300]
                         except:
@@ -1547,9 +1408,7 @@ def chat_page():
         save_current_chat()
         st.rerun()
 
-# --- PÁGINAS EXISTENTES MEJORADAS ---
 def image_page():
-    """Página de análisis de imágenes mejorada"""
     st.title("🖼️ Análisis de Imágenes")
     st.write("Sube una imagen para que Zero la analice usando Groq Vision.")
     
@@ -1559,23 +1418,18 @@ def image_page():
     )
     
     if uploaded_file is not None:
-        # Mostrar imagen
         image = Image.open(uploaded_file)
         st.image(image, caption=uploaded_file.name, use_column_width=True)
         
         if st.button("🔍 Analizar Imagen", type="primary"):
             with st.spinner("Analizando imagen..."):
-                # Convertir a base64
                 image_base64 = b64encode(uploaded_file.getvalue()).decode('utf-8')
                 
-                # Analizar con Groq Vision
                 analysis = analyze_image_with_groq(image_base64, uploaded_file.name)
                 
-                # Mostrar resultado
                 st.subheader("📋 Análisis de la Imagen")
                 st.write(analysis)
                 
-                # Reescribir análisis y guardar si el usuario está autenticado
                 edited_analysis = rewrite_with_editor(analysis, "Mantén el análisis técnico pero hazlo más claro y conciso.")
                 if st.session_state.get("user_id"):
                     try:
@@ -1591,11 +1445,9 @@ def image_page():
                         st.warning(f"⚠️ No se pudo guardar el análisis: {str(e)}")
 
 def audio_page():
-    """Página de transcripción de audio (función existente)"""
     st.title("🎤 Transcripción de Audio")
     st.write("Habla y Zero convertirá tu voz a texto.")
     
-    # Configuración de WebRTC
     webrtc_ctx = webrtc_streamer(
         key="speech-to-text",
         mode=WebRtcMode.SENDONLY,
@@ -1606,7 +1458,6 @@ def audio_page():
     if webrtc_ctx.audio_receiver:
         st.write("🎙️ Grabando... Habla ahora")
         
-        # Procesar audio (implementación simplificada)
         audio_frames = []
         while True:
             try:
@@ -1617,11 +1468,9 @@ def audio_page():
         
         if audio_frames:
             st.write("🔄 Procesando audio...")
-            # Aquí iría la lógica de transcripción
             st.write("📝 **Transcripción:** [Funcionalidad en desarrollo]")
 
 def register_page():
-    """Página de registro de usuarios (solo admin)"""
     st.title("👥 Registro de Usuarios")
     
     if st.session_state.get("rol") != "admin":
@@ -1657,16 +1506,13 @@ def register_page():
                     st.error(f"❌ Error: {str(e)}")
 
 def file_upload_page():
-    """Página para subir y gestionar archivos"""
     st.title("📁 Gestión de Archivos")
     st.write("Sube documentos e imágenes para que Zero pueda usarlos en las conversaciones.")
 
-    # Verificar que el usuario esté autenticado
     if not st.session_state.get("usuario"):
         st.error("❌ Error de sesión. Por favor, vuelve a iniciar sesión.")
         return
 
-    # Obtener user_id desde la base de datos usando el username
     username = st.session_state.usuario
     user_id = db.get_user_id_by_username(username)
 
@@ -1674,7 +1520,6 @@ def file_upload_page():
         st.error("❌ No se pudo obtener la información del usuario.")
         return
 
-    # Sección de subida de archivos
     st.subheader("📤 Subir Nuevo Archivo")
 
     uploaded_file = st.file_uploader(
@@ -1687,13 +1532,11 @@ def file_upload_page():
         st.info(f"📄 {uploaded_file.name} ({uploaded_file.size / 1024:.1f} KB)")
         if st.button("🚀 Procesar Archivo", type="primary"):
             with st.spinner("Procesando archivo..."):
-                # Guardar y procesar archivo
                 file_id, error = save_uploaded_file(uploaded_file)
                 if error:
                     st.error(f"❌ Error al procesar archivo: {error}")
                 else:
                     st.success("✅ Archivo procesado y guardado exitosamente")
-                    # Si es una imagen, realizar análisis con Groq Vision
                     if uploaded_file.type.startswith('image/'):
                         with st.spinner("Analizando imagen con Groq Vision..."):
                             image_base64 = b64encode(uploaded_file.getvalue()).decode('utf-8')
@@ -1708,12 +1551,10 @@ def file_upload_page():
                             context_key = f"Análisis de imagen: {uploaded_file.name}"
                             db.save_user_context(user_id, context_key, analysis, file_id)
                             st.success("🖼️ Imagen analizada con Groq Vision")
-                    # Actualizar archivos y contexto en sesión
                     st.session_state.user_files = db.get_user_files(user_id)
                     st.session_state.user_context = db.get_user_context(user_id)
                     st.rerun()
 
-    # Sección de archivos existentes
     st.subheader("📋 Archivos Subidos")
 
     if "user_files" not in st.session_state:
@@ -1748,7 +1589,6 @@ def file_upload_page():
                                 "role": "user",
                                 "content": content_message
                             })
-                            # Cambiar a página de chat de forma segura
                             st.session_state.current_page = "chat"
                             st.success(f"📄 Contenido de {file_data['filename']} agregado al chat")
                             st.rerun()
@@ -1756,15 +1596,12 @@ def file_upload_page():
         st.info("📭 No tienes archivos subidos aún. ¡Sube tu primer archivo!")
 
 def pqrs_page():
-    """Página PQRS: formulario para enviar mensaje a soporte@zero-va.com."""
     st.title("📮 PQRS")
     st.write("Escribe tu mensaje y envíalo por correo. El mensaje será enviado automáticamente a soporte@zero-va.com.")
 
-    # Formulario simple
     with st.form("pqrs_form"):
-        # El correo destino es fijo y oculto
         dest_email = "soporte@zero-va.com"
-        subject = st.text_input("Asunto:", value="")  # Espacio vacío para que el usuario escriba
+        subject = st.text_input("Asunto:", value="")
         message_body = st.text_area("Mensaje:", height=200)
         submit = st.form_submit_button("Enviar mensaje")
 
@@ -1774,7 +1611,6 @@ def pqrs_page():
         elif not message_body.strip():
             st.error("Escribe el mensaje antes de enviar.")
         else:
-            # Intentar enviar usando variables SMTP en .env
             SMTP_HOST = os.getenv("SMTP_HOST", "")
             SMTP_PORT = int(os.getenv("SMTP_PORT", "587") or 587)
             SMTP_USER = os.getenv("SMTP_USER", "")
@@ -1803,10 +1639,7 @@ def pqrs_page():
                     st.info("Puedes revisar la configuración SMTP en las variables de entorno o enviar el mensaje manualmente:")
                     st.code(f"Para: {dest_email}\nAsunto: {subject}\n\n{message_body}")
 
-# --- FUNCIÓN PRINCIPAL ---
 def main():
-    """Aplicación principal"""
-    # Siempre tomar el usuario desde query params si está presente
     qp = st.query_params
     usuario_qp = qp.get("usuario")
     if usuario_qp:
@@ -1816,7 +1649,6 @@ def main():
             st.session_state.rol = user_info.get("rol", "usuario")
             st.session_state.user_id = user_info.get("id")
 
-    # Si tenemos user_id, precargar lista de archivos del usuario
     if st.session_state.get("user_id") and not st.session_state.get("files_synced"):
         try:
             sync_user_files_from_disk(st.session_state.user_id)
@@ -1825,14 +1657,11 @@ def main():
             pass
         st.session_state.files_synced = True
 
-    # Navegación desde sidebar
     create_sidebar()
 
-    # Determinar página actual (simplificado)
     if "current_page" not in st.session_state:
         st.session_state.current_page = "chat"
 
-    # Renderizar página seleccionada
     if st.session_state.current_page == "chat":
         chat_page()
     elif st.session_state.current_page == "files":
