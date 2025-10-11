@@ -69,5 +69,15 @@
         "rol": "usuario",
         "nfc_uid": null,
         "fecha_registro": "2025-10-08 22:55:42"
+    },
+    "Lorepati": {
+        "clave": "Lorepati27",
+        "rol": "usuario",
+        "nfc_uid": null
+    },
+    "Tban": {
+        "clave": "12345",
+        "rol": "usuario",
+        "nfc_uid": null
     }
 }
