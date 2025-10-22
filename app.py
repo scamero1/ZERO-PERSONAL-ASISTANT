@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, session, redirect, url_for, flash, send_from_directory
+from flask import Flask, render_template, request, jsonify, session, redirect, url_for, flash, send_from_directory, send_file
 import os
 import json
 import uuid
@@ -9,6 +9,8 @@ from base64 import b64encode
 import requests
 from datetime import datetime
 from dotenv import load_dotenv
+from functools import wraps
+from flask_cors import CORS
 
 from database import ZeroDatabase
 from file_processor import FileProcessor
@@ -23,13 +25,16 @@ logging.basicConfig(
 )
 
 app = Flask(__name__, template_folder='templates', static_folder='static')
+CORS(app)
+app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.secret_key = os.getenv("SECRET_KEY", "zero_secret_key")
 app.config['UPLOAD_FOLDER'] = 'user_uploads'
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
 app.config.update(
     SESSION_COOKIE_SECURE=True,
-    SESSION_COOKIE_SAMESITE='Lax'
+    SESSION_COOKIE_SAMESITE='Lax',
+    SESSION_COOKIE_HTTPONLY=True
 )
 
 db = ZeroDatabase()
@@ -50,6 +55,81 @@ STREAM_HEADERS = {
     **BASE_HEADERS,
     "Accept": "text/event-stream",
 }
+
+# --- Decorador de seguridad para admin ---
+
+def admin_required(f):
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        if session.get('rol') != 'admin':
+            return jsonify({'error': 'No autorizado'}), 403
+        return f(*args, **kwargs)
+    return wrapper
+
+# --- Panel Admin ---
+@app.route('/admin', methods=['GET'])
+@admin_required
+def admin_panel():
+    companies = db.list_companies()
+    users = db.list_users()
+    return render_template('admin/index.html', companies=companies, users=users)
+
+@app.route('/admin/companies', methods=['GET'])
+@admin_required
+def admin_list_companies():
+    return jsonify({'companies': db.list_companies()})
+
+@app.route('/admin/create-company', methods=['POST'])
+@admin_required
+def admin_create_company():
+    data = request.form or request.get_json() or {}
+    nombre = (data.get('nombre') or '').strip()
+    slug = (data.get('slug') or '').strip() or None
+    model_name = (data.get('model_name') or '').strip() or None
+    groq_api_key = (data.get('groq_api_key') or '').strip() or None
+    settings_raw = data.get('settings_json')
+    settings = None
+    if settings_raw:
+        try:
+            settings = json.loads(settings_raw) if isinstance(settings_raw, str) else settings_raw
+        except Exception:
+            settings = None
+    if not nombre:
+        return jsonify({'error': 'nombre requerido'}), 400
+    try:
+        empresa_id = db.create_company(nombre, slug, settings, groq_api_key, model_name)
+        return jsonify({'success': True, 'empresa_id': empresa_id})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/admin/assign-user', methods=['POST'])
+@admin_required
+def admin_assign_user():
+    data = request.form or request.get_json() or {}
+    try:
+        user_id = int(data.get('user_id'))
+        empresa_id = int(data.get('empresa_id'))
+    except Exception:
+        return jsonify({'error': 'user_id y empresa_id deben ser enteros'}), 400
+    ok = db.assign_user_to_company(user_id, empresa_id)
+    return jsonify({'success': ok})
+
+@app.route('/admin/export-csv/<int:empresa_id>', methods=['GET'])
+@admin_required
+def admin_export_csv(empresa_id: int):
+    export_dir = os.path.join(app.root_path, 'admin_exports')
+    os.makedirs(export_dir, exist_ok=True)
+    out_path = os.path.join(export_dir, f'empresa_{empresa_id}_documentos.csv')
+    try:
+        db.export_company_docs_csv(empresa_id, out_path)
+        return send_file(out_path, as_attachment=True, download_name=os.path.basename(out_path))
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/admin/static/<path:filename>')
+@admin_required
+def admin_static(filename):
+    return send_from_directory(os.path.join(app.root_path, 'static', 'admin'), filename)
 
 @app.route('/')
 def index():
@@ -92,6 +172,7 @@ def login():
             session['usuario'] = 'admin'
             session['user_id'] = user_info.get('id') if user_info else None
             session['rol'] = 'admin'
+            session['empresa_id'] = db.get_user_company_id(session['user_id']) if session.get('user_id') else None
             if session.get('user_id'):
                 db.update_last_login(session['user_id'])
             return redirect(url_for('index'))
@@ -123,6 +204,7 @@ def login():
             session['usuario'] = usuario
             session['user_id'] = user_info.get('id') if user_info else None
             session['rol'] = user_info.get('rol', rol_json) if user_info else rol_json
+            session['empresa_id'] = db.get_user_company_id(session['user_id']) if session.get('user_id') else None
             if session.get('user_id'):
                 db.update_last_login(session['user_id'])
             return redirect(url_for('index'))
@@ -141,6 +223,7 @@ def register():
     clave = (request.form.get('clave') or '').strip()
     confirmar = (request.form.get('confirmar') or '').strip()
     rol = (request.form.get('rol') or 'usuario').strip()
+    empresa_id = request.form.get('empresa_id')
 
     if not usuario or not clave or not confirmar:
         flash('Completa todos los campos', 'error')
@@ -164,6 +247,12 @@ def register():
         user_info = db.get_user_by_username(usuario)
         if not user_info:
             db.create_user(usuario, pwd_hash, rol=rol)
+            user_info = db.get_user_by_username(usuario)
+        if empresa_id and user_info:
+            try:
+                db.assign_user_to_company(user_info['id'], int(empresa_id))
+            except Exception:
+                pass
     except Exception:
         pass
 
@@ -180,6 +269,7 @@ def nfc_scan():
         session['usuario'] = usuario
         session['user_id'] = user_info['id']
         session['rol'] = user_info['rol']
+        session['empresa_id'] = db.get_user_company_id(user_info['id'])
         return jsonify({'success': True})
     return jsonify({'success': False, 'error': 'Usuario no encontrado'})
 
@@ -235,6 +325,20 @@ def api_chat():
         for ctx in user_context[-5:]:
             context_info += f"- {ctx['context_key']}: {ctx['context_value'][:200]}...\n"
         system_prompt += context_info
+
+    empresa_id = session.get('empresa_id')
+    if empresa_id:
+        empresa = db.get_company_by_id(empresa_id)
+        if empresa:
+            system_prompt += f"\n\nEmpresa: {empresa.get('nombre')}"
+            if empresa.get('settings_json'):
+                try:
+                    settings = json.loads(empresa['settings_json']) if isinstance(empresa['settings_json'], str) else empresa['settings_json']
+                    if isinstance(settings, dict):
+                        keys_preview = ", ".join(list(settings.keys())[:5])
+                        system_prompt += f"\nPolíticas: {keys_preview}"
+                except Exception:
+                    pass
 
     payload = {
         "model": GROQ_TEXT_MODEL,

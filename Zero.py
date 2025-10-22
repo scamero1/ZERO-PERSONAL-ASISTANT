@@ -14,7 +14,9 @@ import uuid
 from dotenv import load_dotenv
 import requests
 import json
+import hashlib
 import io
+import csv
 import re
 from datetime import datetime
 import unicodedata
@@ -22,6 +24,7 @@ import smtplib
 from email.message import EmailMessage
 from database import ZeroDatabase
 from file_processor import FileProcessor
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 db = ZeroDatabase()
 
@@ -46,6 +49,38 @@ STREAM_HEADERS = {
     "Accept": "text/event-stream",
 }
 
+# Helpers para API por empresa
+
+def _company_ai_headers(stream: bool = False):
+    empresa_id = st.session_state.get("empresa_id")
+    api_key = GROQ_API_KEY
+    if empresa_id:
+        try:
+            empresa = db.get_company_by_id(empresa_id)
+            if empresa and empresa.get("groq_api_key"):
+                api_key = empresa.get("groq_api_key")
+        except Exception:
+            pass
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    if stream:
+        headers["Accept"] = "text/event-stream"
+    return headers
+
+
+def _company_model(default_model: str) -> str:
+    empresa_id = st.session_state.get("empresa_id")
+    if empresa_id:
+        try:
+            empresa = db.get_company_by_id(empresa_id)
+            if empresa and empresa.get("model_name"):
+                return empresa.get("model_name")
+        except Exception:
+            pass
+    return default_model
+
 def normalize_str(s: str) -> str:
     s = (s or "")
     s = s.lower()
@@ -68,6 +103,7 @@ def initialize_session_state():
         "usuario": None,
         "rol": None,
         "user_id": None,
+        "empresa_id": None,
         "messages": [],
         "thinking": False,
         "current_chat": str(uuid.uuid4()),
@@ -409,6 +445,8 @@ def initialize_session_state():
         st.session_state.rol = None
     if "user_id" not in st.session_state:
         st.session_state.user_id = None
+    if "empresa_id" not in st.session_state:
+        st.session_state.empresa_id = None
     
     if "messages" not in st.session_state:
         st.session_state.messages = []
@@ -426,17 +464,42 @@ initialize_session_state()
 
 def _system_prompt():
     base_prompt = "Eres un asistente AI llamado Zero. Sé conciso, profesional y útil."
+
+    # Añadir contexto de empresa si existe en sesión
+    empresa_info_text = ""
+    try:
+        empresa_id = st.session_state.get("empresa_id")
+        if empresa_id:
+            empresa = db.get_company_by_id(empresa_id)
+            if empresa:
+                nombre_emp = empresa.get("nombre") or empresa.get("slug") or str(empresa_id)
+                empresa_info_text += f"\n\nEmpresa activa: {nombre_emp}."
+                # Añadir resumen de políticas/contexto de empresa si disponible
+                ctx_list = db.get_company_context(empresa_id)
+                if ctx_list:
+                    sample_items = ctx_list[:2]
+                    resumen = "; ".join([(item.get("context_value") or item.get("content") or "")[:120] for item in sample_items])
+                    if resumen.strip():
+                        empresa_info_text += f" Políticas relevantes (resumen): {resumen}"
+    except Exception:
+        pass
     
+    # Añadir contexto personalizado del usuario
     if st.session_state.get("user_context"):
         context_info = "\n\nContexto personalizado del usuario:\n"
         for ctx in st.session_state.user_context[-5:]:
-            context_info += f"- {ctx['context_key']}: {ctx['context_value'][:200]}...\n"
+            try:
+                key = ctx.get('context_key', 'contexto')
+                val = ctx.get('context_value', '')
+            except Exception:
+                key, val = 'contexto', str(ctx)
+            context_info += f"- {key}: {str(val)[:200]}...\n"
         base_prompt += context_info
-    
-    return {"role": "system", "content": base_prompt}
+
+    return {"role": "system", "content": base_prompt + empresa_info_text}
 
 def groq_chat_stream(history_messages, *, model=None, max_tokens=1200, temperature=0.7):
-    m = model or GROQ_TEXT_MODEL
+    m = _company_model(model or GROQ_TEXT_MODEL)
     payload = {
         "model": m,
         "messages": [_system_prompt()] + history_messages,
@@ -445,7 +508,7 @@ def groq_chat_stream(history_messages, *, model=None, max_tokens=1200, temperatu
         "stream": True,
     }
     try:
-        with requests.post(API_URL, headers=STREAM_HEADERS, json=payload, stream=True, timeout=300) as r:
+        with requests.post(API_URL, headers=_company_ai_headers(True), json=payload, stream=True, timeout=300) as r:
             r.raise_for_status()
             for raw in r.iter_lines(decode_unicode=True):
                 if not raw:
@@ -716,13 +779,13 @@ def analyze_document_with_groq(content, filename):
         """
 
         payload = {
-            "model": GROQ_TEXT_MODEL,
+            "model": _company_model(GROQ_TEXT_MODEL),
             "messages": [{"role": "user", "content": prompt}],
             "max_tokens": 1200,
             "temperature": 0.3
         }
 
-        response = requests.post(API_URL, headers=BASE_HEADERS, json=payload, timeout=60)
+        response = requests.post(API_URL, headers=_company_ai_headers(False), json=payload, timeout=60)
         
         if response.status_code == 200:
             result = response.json()
@@ -736,7 +799,7 @@ def analyze_document_with_groq(content, filename):
 def analyze_image_with_groq(image_base64, filename):
     try:
         payload = {
-            "model": GROQ_VISION_MODEL,
+            "model": _company_model(GROQ_VISION_MODEL),
             "messages": [
                 {
                     "role": "user",
@@ -770,7 +833,7 @@ Elementos notables o importantes"""
             "temperature": 0.3
         }
         
-        response = requests.post(API_URL, headers=BASE_HEADERS, json=payload, timeout=60)
+        response = requests.post(API_URL, headers=_company_ai_headers(False), json=payload, timeout=60)
         
         if response.status_code == 200:
             result = response.json()
@@ -794,22 +857,61 @@ def save_uploaded_file(uploaded_file):
         if file_type == 'unknown':
             return None, "Tipo de archivo no soportado"
 
-        user_dir = f"user_uploads/{st.session_state.user_id}"
-        os.makedirs(user_dir, exist_ok=True)
-        file_path = os.path.join(user_dir, uploaded_file.name)
+        empresa_id = st.session_state.get("empresa_id")
+        encrypt_enabled = False
+        if empresa_id:
+            try:
+                settings = db.get_company_settings(empresa_id)
+                encrypt_enabled = bool(settings.get("encrypt_files"))
+                if encrypt_enabled:
+                    db.ensure_empresa_key(empresa_id)
+            except Exception:
+                encrypt_enabled = False
 
-        with open(file_path, "wb") as f:
-            f.write(uploaded_file.getbuffer())
+        user_id = st.session_state.user_id
+        base_dir = "user_uploads_enc" if encrypt_enabled else "user_uploads"
+        user_dir = os.path.join(base_dir, str(user_id))
+        os.makedirs(user_dir, exist_ok=True)
+        safe_name = uploaded_file.name
+        file_path = os.path.join(user_dir, safe_name + (".enc" if encrypt_enabled else ""))
+
+        raw_bytes = uploaded_file.getvalue()
+
+        if encrypt_enabled:
+            data_key = db.get_active_empresa_key(empresa_id)
+            if not data_key:
+                # Fallback: guardar sin cifrado si no hay clave activa
+                encrypt_enabled = False
+                base_dir = "user_uploads"
+                user_dir = os.path.join(base_dir, str(user_id))
+                os.makedirs(user_dir, exist_ok=True)
+                file_path = os.path.join(user_dir, safe_name)
+                with open(file_path, "wb") as f:
+                    f.write(raw_bytes)
+                try:
+                    st.warning("No hay clave activa de cifrado; archivo guardado sin cifrado.")
+                except Exception:
+                    pass
+            else:
+                aes = AESGCM(data_key)
+                nonce = os.urandom(12)
+                aad = f"{empresa_id}:{user_id}".encode()
+                ciphertext = aes.encrypt(nonce, raw_bytes, associated_data=aad)
+                with open(file_path, "wb") as f:
+                    f.write(nonce + ciphertext)
+        else:
+            with open(file_path, "wb") as f:
+                f.write(raw_bytes)
 
         content = ""
         analysis = ""
         
         if file_type == 'image':
-            image_base64 = b64encode(uploaded_file.getvalue()).decode('utf-8')
+            image_base64 = b64encode(raw_bytes).decode('utf-8')
             analysis = analyze_image_with_groq(image_base64, uploaded_file.name)
             content = "Imagen procesada para análisis visual"
         else:
-            file_content = uploaded_file.getvalue()
+            file_content = raw_bytes
             
             if file_type in ['pdf', 'word']:
                 processor = FileProcessor()
@@ -827,18 +929,18 @@ def save_uploaded_file(uploaded_file):
                 analysis = f"Documento procesado: {uploaded_file.name}"
 
         file_id = db.save_file(
-            user_id=st.session_state.user_id,
+            user_id=user_id,
             filename=uploaded_file.name,
             file_path=file_path,
             file_type=file_type,
             file_size=uploaded_file.size,
             content_extracted=content,
-            analysis_summary=analysis[:350]
+            analysis_summary=(analysis or "")[:350]
         )
 
         if analysis:
             context_key = f"Archivo: {uploaded_file.name}"
-            db.save_user_context(st.session_state.user_id, context_key, analysis, file_id)
+            db.save_user_context(user_id, context_key, analysis, file_id)
 
         return file_id, None
 
@@ -1342,21 +1444,28 @@ def chat_page():
                     </style>
                 """, unsafe_allow_html=True)
                 
-                if not GROQ_API_KEY:
-                    full_response = "GROQ_API_KEY no configurada en el entorno de Streamlit. Verifica tu archivo .env o variables del sistema."
+                # Determinar API key a usar (empresa → global)
+                current_api_key = GROQ_API_KEY
+                try:
+                    emp = db.get_company_by_id(st.session_state.get("empresa_id")) if st.session_state.get("empresa_id") else None
+                    if emp and emp.get("groq_api_key"):
+                        current_api_key = emp.get("groq_api_key")
+                except Exception:
+                    pass
+
+                if not current_api_key:
+                    full_response = "GROQ_API_KEY no configurada para esta empresa ni globalmente. Configura una API key."
                     message_placeholder.markdown(full_response)
                 else:
-                    messages_for_api = st.session_state.messages.copy()
-                    
+                    messages_for_api = [_system_prompt()] + st.session_state.messages.copy()
                     payload = {
-                        "model": GROQ_TEXT_MODEL,
+                        "model": _company_model(GROQ_TEXT_MODEL),
                         "messages": messages_for_api,
                         "stream": True,
                         "max_tokens": 2000,
                         "temperature": 0.7
                     }
-                    
-                    response = requests.post(API_URL, headers=STREAM_HEADERS, json=payload, stream=True, timeout=120)
+                    response = requests.post(API_URL, headers=_company_ai_headers(True), json=payload, stream=True, timeout=120)
                     
                     if response.status_code == 200:
                         for line in response.iter_lines():
@@ -1471,39 +1580,147 @@ def audio_page():
             st.write("📝 **Transcripción:** [Funcionalidad en desarrollo]")
 
 def register_page():
-    st.title("👥 Registro de Usuarios")
+    st.title("🛠️ Panel Admin")
     
     if st.session_state.get("rol") != "admin":
-        st.error("❌ Acceso denegado. Solo administradores pueden registrar usuarios.")
+        st.error("❌ Acceso denegado. Solo administradores.")
         return
     
-    with st.form("registro_form"):
-        st.subheader("Crear Nuevo Usuario")
-        
-        username = st.text_input("Nombre de usuario")
-        password = st.text_input("Contraseña", type="password")
-        confirm_password = st.text_input("Confirmar contraseña", type="password")
-        rol = st.selectbox("Rol", ["usuario", "admin"])
-        nfc_uid = st.text_input("NFC UID (opcional)")
-        
-        submitted = st.form_submit_button("Registrar Usuario")
-        
-        if submitted:
-            if not username or not password:
-                st.error("❌ Todos los campos son obligatorios")
-            elif password != confirm_password:
-                st.error("❌ Las contraseñas no coinciden")
-            elif len(password) < 6:
-                st.error("❌ La contraseña debe tener al menos 6 caracteres")
-            else:
+    # Datos iniciales
+    try:
+        companies = db.list_companies()
+    except Exception:
+        companies = []
+    try:
+        users = db.list_users()
+    except Exception:
+        users = []
+
+    tab1, tab2, tab3 = st.tabs(["Crear Empresa", "Asignar Usuario", "Empresas"])
+
+    # --- Crear Empresa ---
+    with tab1:
+        st.subheader("Nueva Empresa")
+        with st.form("form_create_company"):
+            nombre = st.text_input("Nombre")
+            slug = st.text_input("Slug (opcional)")
+            model_name = st.text_input("Modelo IA (opcional)", value=GROQ_TEXT_MODEL)
+            groq_api_key = st.text_input("Groq API Key (opcional)", type="password")
+            settings_json = st.text_area("Settings JSON (opcional)")
+
+            submitted = st.form_submit_button("Crear empresa", type="primary")
+            if submitted:
+                if not nombre.strip():
+                    st.error("Nombre es requerido")
+                else:
+                    settings = None
+                    if settings_json and settings_json.strip():
+                        try:
+                            settings = json.loads(settings_json)
+                        except Exception as e:
+                            st.warning(f"Settings inválidos: {e}")
+                    try:
+                        empresa_id = db.create_company(
+                            nombre.strip(),
+                            slug.strip() or None,
+                            settings,
+                            groq_api_key.strip() or None,
+                            model_name.strip() or None
+                        )
+                        st.success(f"Empresa creada: id {empresa_id}")
+                        companies = db.list_companies()
+                    except Exception as e:
+                        st.error(f"Error creando empresa: {e}")
+
+    # --- Asignar Usuario ---
+    with tab2:
+        st.subheader("Asignar Usuario a Empresa")
+        if not users or not companies:
+            st.info("Primero asegúrate de tener usuarios y empresas creadas.")
+        else:
+            user_opt = st.selectbox(
+                "Usuario",
+                options=[(u['id'], u['username']) for u in users],
+                format_func=lambda x: f"{x[1]} (id: {x[0]})"
+            )
+            comp_opt = st.selectbox(
+                "Empresa",
+                options=[(c['id'], c['nombre']) for c in companies],
+                format_func=lambda x: f"{x[1]} (id: {x[0]})"
+            )
+            if st.button("Asignar", type="primary"):
                 try:
-                    success = registrar_usuario(username, password, rol, nfc_uid or None)
-                    if success:
-                        st.success(f"✅ Usuario '{username}' registrado exitosamente")
+                    ok = db.assign_user_to_company(user_opt[0], comp_opt[0])
+                    if ok:
+                        st.success(f"Usuario {user_opt[1]} asignado a {comp_opt[1]}")
+                        if st.session_state.get('user_id') == user_opt[0]:
+                            st.session_state.empresa_id = comp_opt[0]
                     else:
-                        st.error("❌ Error al registrar usuario. Puede que ya exista.")
+                        st.error("No se pudo asignar usuario")
                 except Exception as e:
-                    st.error(f"❌ Error: {str(e)}")
+                    st.error(f"Error asignando: {e}")
+
+    # --- Empresas ---
+    with tab3:
+        st.subheader("Empresas registradas")
+        if not companies:
+            st.info("No hay empresas aún.")
+        else:
+            for c in companies:
+                with st.expander(f"{c.get('nombre')} (id: {c.get('id')})", expanded=False):
+                    st.write(f"Slug: {c.get('slug')}")
+                    st.write(f"Modelo: {c.get('model_name')}")
+                    # Ajustes de seguridad y cifrado por empresa
+                    try:
+                        settings = db.get_company_settings(c.get('id')) or {}
+                    except Exception:
+                        settings = {}
+                    enc_enabled = bool(settings.get("encrypt_files"))
+
+                    with st.form(f"settings_company_{c.get('id')}"):
+                        enc_checked = st.checkbox(
+                            "Encriptar archivos de esta empresa",
+                            value=enc_enabled,
+                            key=f"enc_chk_{c.get('id')}"
+                        )
+                        save_settings = st.form_submit_button("Guardar ajustes", type="primary")
+                        if save_settings:
+                            ok = db.update_company_settings(c.get('id'), {"encrypt_files": bool(enc_checked)})
+                            if ok and enc_checked:
+                                try:
+                                    db.ensure_empresa_key(c.get('id'))
+                                except Exception as e:
+                                    st.warning(f"No se pudo asegurar clave de cifrado: {e}")
+                            st.success("Ajustes actualizados")
+
+                    if enc_enabled:
+                        if st.button("Rotar clave de cifrado", key=f"rotar_{c.get('id')}"):
+                            try:
+                                v = db.rotate_empresa_key(c.get('id'))
+                                st.success(f"Clave rotada. Nueva versión: {v}")
+                            except Exception as e:
+                                st.error(f"No se pudo rotar clave: {e}")
+
+                    # Export CSV inline
+                    try:
+                        files = db.get_company_files(c.get('id'))
+                        buf = io.StringIO()
+                        writer = csv.writer(buf)
+                        writer.writerow(["file_id","user_id","filename","file_type","file_size","uploaded_at","analysis_summary"])
+                        for doc in files:
+                            writer.writerow([
+                                doc.get("id"), doc.get("user_id"), doc.get("filename"), doc.get("file_type"),
+                                doc.get("file_size"), doc.get("uploaded_at"), (doc.get("analysis_summary") or "").replace("\n"," ")
+                            ])
+                        csv_bytes = buf.getvalue().encode("utf-8")
+                        st.download_button(
+                            label="Descargar CSV de documentos",
+                            data=csv_bytes,
+                            file_name=f"empresa_{c.get('id')}_documentos.csv",
+                            mime="text/csv"
+                        )
+                    except Exception as e:
+                        st.warning(f"No se pudo generar CSV: {e}")
 
 def file_upload_page():
     st.title("📁 Gestión de Archivos")
@@ -1541,11 +1758,14 @@ def file_upload_page():
                         with st.spinner("Analizando imagen con Groq Vision..."):
                             image_base64 = b64encode(uploaded_file.getvalue()).decode('utf-8')
                             analysis = analyze_image_with_groq(image_base64, uploaded_file.name)
+                            # Usar la ruta real guardada (puede ser cifrada)
+                            file_rec = db.get_file_by_id(file_id)
+                            real_path = file_rec.get("file_path") if file_rec else f"user_uploads/{user_id}/{uploaded_file.name}"
                             db.save_image_analysis(
                                 user_id=user_id,
-                                image_path=f"user_uploads/{user_id}/{uploaded_file.name}",
+                                image_path=real_path,
                                 analysis_result=analysis,
-                                model_used=GROQ_VISION_MODEL,
+                                model_used=_company_model(GROQ_VISION_MODEL),
                                 archivo_id=file_id
                             )
                             context_key = f"Análisis de imagen: {uploaded_file.name}"
@@ -1648,6 +1868,7 @@ def main():
         if user_info:
             st.session_state.rol = user_info.get("rol", "usuario")
             st.session_state.user_id = user_info.get("id")
+            st.session_state.empresa_id = user_info.get("empresa_id")
 
     if st.session_state.get("user_id") and not st.session_state.get("files_synced"):
         try:
