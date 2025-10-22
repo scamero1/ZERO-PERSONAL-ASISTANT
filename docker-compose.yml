@@ -1,5 +1,17 @@
-version: "3.9"
+version: "3.8"
 services:
+  zero:
+    build: .
+    container_name: zero_app
+    env_file:
+      - .env
+    volumes:
+      - ./user_uploads:/app/user_uploads
+      - ./uploads:/app/uploads
+    ports:
+      - "127.0.0.1:8501:8501"  # expone solo localhost; Nginx hará reverse-proxy
+    restart: unless-stopped
+
   flask:
     build:
       context: .
