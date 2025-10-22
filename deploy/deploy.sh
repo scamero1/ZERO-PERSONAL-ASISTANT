@@ -1,21 +1,30 @@
 #!/usr/bin/env bash
+# Deploy script para /opt/zero
 set -euo pipefail
-# Ejecutar desde /opt/zero como usuario deploy (o con sudo)
+
 PROJECT_DIR="/opt/zero"
+echo "Deploy: entrando en $PROJECT_DIR"
 cd "$PROJECT_DIR"
 
+# asegurarse de que .env existe
 if [ ! -f .env ]; then
-  echo ".env no encontrado en $PROJECT_DIR"
+  echo ".env no encontrado en $PROJECT_DIR — crea .env a partir de .env.example"
   exit 1
 fi
 
-echo "Construyendo imagen(es) Docker..."
+echo "Actualizando código (si es git repo)..."
+if [ -d .git ]; then
+  git fetch --all --prune
+  git reset --hard origin/main || git reset --hard origin/master || true
+fi
+
+echo "Construyendo imágenes Docker..."
 sudo docker compose build --no-cache
 
 echo "Levantando contenedores..."
 sudo docker compose up -d --remove-orphans
 
-echo "Recargando nginx..."
-sudo systemctl reload nginx || true
+echo "Prueba de containers:"
+sudo docker compose ps
 
-echo "Despliegue completado."
+echo "Deploy completado."
