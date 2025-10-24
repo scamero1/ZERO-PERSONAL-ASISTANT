@@ -1,0 +1,15 @@
+[Unit]
+Description=ZERO (Streamlit sin Docker)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/zero
+# Ajusta 'User' al usuario que tenga permisos en /opt/zero (ej. ubuntu)
+User=deploy
+EnvironmentFile=/opt/zero/.env
+ExecStart=/opt/zero/.venv/bin/streamlit run /opt/zero/Zero.py --server.port 8501 --server.address 127.0.0.1 --server.headless true
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
