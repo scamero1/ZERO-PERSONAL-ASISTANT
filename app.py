@@ -276,14 +276,8 @@ def nfc_scan():
 @app.route('/logout')
 def flask_logout():
     session.clear()
-    public_site_url = os.getenv("PUBLIC_SITE_URL")
-    if public_site_url:
-        target = public_site_url.rstrip('/') + '/'
-    else:
-        scheme = 'https' if request.is_secure else 'http'
-        host = request.host.split(':')[0]
-        target = f"{scheme}://{host}/"
-    resp = redirect(target)
+    # Redirigir siempre al login después de cerrar sesión
+    resp = redirect(url_for('login'))
     try:
         cookie_name = app.session_cookie_name
     except Exception:

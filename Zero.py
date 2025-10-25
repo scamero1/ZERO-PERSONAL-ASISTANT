@@ -36,6 +36,7 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 if not GROQ_API_KEY:
     st.error("GROQ_API_KEY no encontrada en las variables de entorno")
 API_URL = "https://api.groq.com/openai/v1/chat/completions"
+PUBLIC_SITE_URL = os.getenv("PUBLIC_SITE_URL", "https://zero-va.com")
 
 GROQ_TEXT_MODEL = os.getenv("GROQ_TEXT_MODEL", "llama-3.1-8b-instant")
 GROQ_VISION_MODEL = os.getenv("GROQ_VISION_MODEL", "llama-3.2-11b-vision-preview")
@@ -743,17 +744,17 @@ def create_sidebar():
         st.markdown('</div>', unsafe_allow_html=True)
 
         st.markdown("---")
-        st.markdown(
-            '''
-            <a href="https://zero-va.com/logout" target="_self"
-               style="display:block;text-align:center;padding:0.875rem 1.5rem;border-radius:12px;
-                      background:linear-gradient(135deg,#8b5cf6 0%,#a78bfa 100%);
-                      color:white;text-decoration:none;font-weight:600;">
-                Cerrar Sesión
-            </a>
-            ''',
-            unsafe_allow_html=True
-        )
+        if st.button("Cerrar Sesión", key="logout_btn", use_container_width=True, type="primary"):
+            try:
+                # Cerrar sesión local (Streamlit)
+                logout()
+                # Cerrar sesión backend (Flask) para limpiar cookie
+                try:
+                    requests.get(f"{PUBLIC_SITE_URL}/logout", timeout=3)
+                except Exception:
+                    pass
+            finally:
+                st.rerun()
 
 def analyze_document_with_groq(content, filename):
     try:

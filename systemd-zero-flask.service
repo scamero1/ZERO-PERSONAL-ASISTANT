@@ -1,0 +1,15 @@
+[Unit]
+Description=ZERO Flask via Waitress
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/root/Zero/ZERO-PERSONAL-ASISTANT
+Environment="PATH=/root/Zero/ZERO-PERSONAL-ASISTANT/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin"
+EnvironmentFile=/root/Zero/ZERO-PERSONAL-ASISTANT/.env
+ExecStart=/bin/bash -lc '. /root/Zero/ZERO-PERSONAL-ASISTANT/.venv/bin/activate && waitress-serve --host=0.0.0.0 --port=8000 app:app'
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
