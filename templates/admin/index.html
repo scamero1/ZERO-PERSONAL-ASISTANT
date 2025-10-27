@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Panel de Administración</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 0; background: #0f172a; color: #e2e8f0; }
+    header { padding: 16px 24px; background: #111827; border-bottom: 1px solid #1f2937; display: flex; justify-content: space-between; align-items: center; }
+    header h1 { font-size: 18px; margin: 0; }
+    main { padding: 24px; display: grid; gap: 24px; grid-template-columns: 1fr 1fr; }
+    section { background: #111827; border: 1px solid #1f2937; border-radius: 10px; padding: 16px; }
+    h2 { font-size: 16px; margin: 0 0 12px; }
+    label { display: block; font-size: 12px; color: #94a3b8; margin-bottom: 4px; }
+    input, select, textarea { width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid #334155; background: #0b1220; color: #e2e8f0; }
+    textarea { min-height: 100px; }
+    form { display: grid; gap: 10px; }
+    button { padding: 10px 12px; border-radius: 8px; border: 1px solid #334155; background: #1f2937; color: #e2e8f0; cursor: pointer; }
+    button:hover { background: #374151; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; border-bottom: 1px solid #1f2937; padding: 8px; font-size: 13px; }
+    .muted { color: #94a3b8; font-size: 12px; }
+    .full { grid-column: 1 / -1; }
+    .footer { padding: 16px 24px; color: #94a3b8; }
+    a { color: #93c5fd; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Panel de Administración</h1>
+    <nav>
+      <a href="/">Ir a Zero</a>
+      &nbsp;•&nbsp;
+      <a href="/logout">Salir</a>
+    </nav>
+  </header>
+
+  <main>
+    <section>
+      <h2>Crear empresa</h2>
+      <form method="POST" action="{{ url_for('admin_create_company') }}">
+        <div>
+          <label>Nombre</label>
+          <input type="text" name="nombre" required />
+        </div>
+        <div>
+          <label>Slug (opcional)</label>
+          <input type="text" name="slug" placeholder="mi-empresa" />
+        </div>
+        <div>
+          <label>Modelo Groq (opcional)</label>
+          <input type="text" name="model_name" placeholder="llama-3.3-70b-versatile" />
+        </div>
+        <div>
+          <label>Groq API Key (opcional)</label>
+          <input type="text" name="groq_api_key" placeholder="sk_..." />
+        </div>
+        <div>
+          <label>Configuración JSON (opcional)</label>
+          <textarea name="settings_json" placeholder='{"policy":"solo documentos internos"}'></textarea>
+        </div>
+        <div>
+          <button type="submit">Crear</button>
+        </div>
+        <p class="muted">La configuración JSON puede incluir políticas, límites y ajustes específicos para la empresa.</p>
+      </form>
+    </section>
+
+    <section>
+      <h2>Asignar usuario a empresa</h2>
+      <form method="POST" action="{{ url_for('admin_assign_user') }}">
+        <div>
+          <label>Usuario</label>
+          <select name="user_id" required>
+            {% for u in users %}
+              <option value="{{ u.id }}">{{ u.username }} (id: {{ u.id }})</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label>Empresa</label>
+          <select name="empresa_id" required>
+            {% for c in companies %}
+              <option value="{{ c.id }}">{{ c.nombre }} (id: {{ c.id }})</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <button type="submit">Asignar</button>
+        </div>
+        <p class="muted">Los usuarios asignados a una empresa sólo verán y generarán datos dentro de esa empresa.</p>
+      </form>
+    </section>
+
+    <section class="full">
+      <h2>Empresas registradas</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Nombre</th>
+            <th>Slug</th>
+            <th>Modelo</th>
+            <th>Exportar</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for c in companies %}
+          <tr>
+            <td>{{ c.id }}</td>
+            <td>{{ c.nombre }}</td>
+            <td>{{ c.slug }}</td>
+            <td>{{ c.model_name }}</td>
+            <td>
+              <a href="{{ url_for('admin_export_csv', empresa_id=c.id) }}">CSV</a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <p class="muted">Usa el enlace CSV para descargar documentos analizados por empresa.</p>
+    </section>
+  </main>
+
+  <div class="footer">
+    <span class="muted">Zero Admin • Multi-tenant y seguridad reforzada</span>
+  </div>
+</body>
+</html>

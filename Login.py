@@ -601,13 +601,13 @@ def verificar_login():
 def logout():
     usuario = st.session_state.get("usuario", "USER")
     st.session_state.clear()
+    # Restablecer estado mínimo para mostrar pantalla de login
+    st.session_state["autenticado"] = False
+    st.session_state["usuario"] = None
+    st.session_state["rol"] = None
     st.info(f"🔒 Sesión cerrada: {usuario}")
-    # Redirección desde Streamlit al logout público (dominio Cloudflare)
-    st.components.v1.html(
-        '<script>window.top.location.href="https://zero-va.com/logout";</script>',
-        height=0
-    )
-    st.stop()
+    # Volver al flujo local (login) en la propia app
+    st.rerun()
 
 # --- REGISTRO ALIEN ---
 def registrar_usuario(usuario, clave, rol, uid_nfc=None):

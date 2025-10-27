@@ -1,0 +1,13 @@
+[Unit]
+Description=Cloudflare Tunnel ZERO
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/root/Zero/ZERO-PERSONAL-ASISTANT
+ExecStart=/bin/bash -lc 'cloudflared --config /root/Zero/ZERO-PERSONAL-ASISTANT/cloudflared.yml tunnel run --token $(cat /etc/cloudflared/ZERO.token)'
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

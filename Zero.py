@@ -14,30 +14,29 @@ import uuid
 from dotenv import load_dotenv
 import requests
 import json
+import hashlib
 import io
+import csv
 import re
 from datetime import datetime
-
-# Añadidos para enviar emails
+import unicodedata
 import smtplib
 from email.message import EmailMessage
-
 from database import ZeroDatabase
 from file_processor import FileProcessor
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 db = ZeroDatabase()
 
-# Load environment variables
 load_dotenv()
 
-# Email por defecto para PQRS (puede sobrescribirse con la variable de entorno PQRS_EMAIL)
 PQRS_DEFAULT_EMAIL = os.getenv("PQRS_EMAIL", "soporte@zero-va.com")
 
-# Get API key from environment
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 if not GROQ_API_KEY:
     st.error("GROQ_API_KEY no encontrada en las variables de entorno")
 API_URL = "https://api.groq.com/openai/v1/chat/completions"
+PUBLIC_SITE_URL = os.getenv("PUBLIC_SITE_URL", "https://zero-va.com")
 
 GROQ_TEXT_MODEL = os.getenv("GROQ_TEXT_MODEL", "llama-3.1-8b-instant")
 GROQ_VISION_MODEL = os.getenv("GROQ_VISION_MODEL", "llama-3.2-11b-vision-preview")
@@ -51,8 +50,45 @@ STREAM_HEADERS = {
     "Accept": "text/event-stream",
 }
 
+# Helpers para API por empresa
+
+def _company_ai_headers(stream: bool = False):
+    empresa_id = st.session_state.get("empresa_id")
+    api_key = GROQ_API_KEY
+    if empresa_id:
+        try:
+            empresa = db.get_company_by_id(empresa_id)
+            if empresa and empresa.get("groq_api_key"):
+                api_key = empresa.get("groq_api_key")
+        except Exception:
+            pass
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    if stream:
+        headers["Accept"] = "text/event-stream"
+    return headers
+
+
+def _company_model(default_model: str) -> str:
+    empresa_id = st.session_state.get("empresa_id")
+    if empresa_id:
+        try:
+            empresa = db.get_company_by_id(empresa_id)
+            if empresa and empresa.get("model_name"):
+                return empresa.get("model_name")
+        except Exception:
+            pass
+    return default_model
+
+def normalize_str(s: str) -> str:
+    s = (s or "")
+    s = s.lower()
+    s = unicodedata.normalize("NFD", s)
+    return "".join(ch for ch in s if unicodedata.category(ch) != "Mn")
+
 def safe_text(text: str) -> str:
-    """Repara textos con problemas de encoding"""
     if text is None:
         return ""
     if not isinstance(text, str):
@@ -62,13 +98,13 @@ def safe_text(text: str) -> str:
     except Exception:
         return text
 
-# --- INICIALIZACIÓN DE ESTADO ---
 def initialize_session_state():
     default_states = {
         "autenticado": False,
         "usuario": None,
         "rol": None,
         "user_id": None,
+        "empresa_id": None,
         "messages": [],
         "thinking": False,
         "current_chat": str(uuid.uuid4()),
@@ -83,13 +119,11 @@ def initialize_session_state():
 
 initialize_session_state()
 
-# --- DISEÑO ZERO MEJORADO ---
 def load_css():
     st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
         
-        /* Valores por defecto (modo oscuro) */
         :root {
             --primary-bg: #0a0a0a;
             --secondary-bg: #111111;
@@ -113,7 +147,6 @@ def load_css():
             --error: #ef4444;
         }
 
-        /* Modo claro: sobreescribe variables cuando el sistema lo prefiera */
         @media (prefers-color-scheme: light) {
             :root {
                 --primary-bg: #f8fafc;
@@ -138,7 +171,6 @@ def load_css():
                 --error: #dc2626;
             }
 
-            /* Ajustes secundarios para modo claro */
             .stApp {
                 color: var(--text-primary);
             }
@@ -156,7 +188,6 @@ def load_css():
             font-family: 'Plus Jakarta Sans', sans-serif;
         }
 
-        /* Sidebar elegante */
         .css-1d391kg, .css-1lcbmhc {
             background: var(--sidebar-bg) !important;
             border-right: 1px solid var(--border-color);
@@ -168,28 +199,25 @@ def load_css():
             margin-bottom: 1.5rem;
         }
 
-        /* Reducir espacio del header y del gap interno para acercarlo al contenido siguiente */
         .main-header {
             background: var(--secondary-bg);
-            padding: 0.6rem 1.2rem;   /* menos padding vertical */
+            padding: 0.6rem 1.2rem;
             border-bottom: 1px solid var(--border-color);
-            margin-bottom: 0.2rem;    /* pequeño espacio entre header y chat */
+            margin-bottom: 0.2rem;
         }
         .main-header > div {
             display: flex;
             align-items: center;
-            gap: 0.5rem;              /* gap más pequeño entre icono y texto */
+            gap: 0.5rem;
         }
 
-        /* Acercar el chat-container al header */
         .chat-container {
             background: var(--primary-bg);
-            margin-top: 0;                        /* asegurar sin margen extra */
-            min-height: calc(100vh - 72px);      /* ajustar cálculo para nuevo header */
+            margin-top: 0;
+            min-height: calc(100vh - 72px);
             padding: 0;
         }
 
-        /* Botones morados */
         .stButton > button {
             border-radius: 12px;
             padding: 0.875rem 1.5rem;
@@ -225,7 +253,6 @@ def load_css():
             transform: translateY(-2px) !important;
         }
 
-        /* Lista de chats */
         .chat-list {
             display: flex;
             flex-direction: column;
@@ -269,7 +296,6 @@ def load_css():
             text-overflow: ellipsis;
         }
 
-        /* Archivos en sidebar */
         .file-item {
             padding: 0.75rem;
             border-radius: 8px;
@@ -297,7 +323,6 @@ def load_css():
             color: var(--text-muted);
         }
 
-        /* Área principal */
         .main-header {
             background: var(--secondary-bg);
             padding: 1.5rem 2rem;
@@ -311,13 +336,13 @@ def load_css():
             padding: 0;
         }
 
-        /* Mensajes elegantes */
         .message {
             padding: 1.5rem 2rem;
             animation: slideIn 0.4s ease;
         }
 
         .chat-list {{
+
             max-height: 40vh;
             overflow-y: auto;
             margin-bottom: 1rem;
@@ -356,7 +381,6 @@ def load_css():
             color: rgba(255,255,255,0.8);
         }}
 
-        /* Estilos para archivos */
         .file-item {{
             padding: 0.75rem;
             margin: 0.5rem 0;
@@ -405,8 +429,6 @@ def load_css():
 
 load_css()
 
-# --- INICIALIZACIÓN DE SERVICIOS ---
-# Twilio (para verificación SMS)
 try:
     twilio_client = Client(
         os.getenv("TWILIO_ACCOUNT_SID"),
@@ -415,7 +437,6 @@ try:
 except Exception as e:
     st.warning(f"No se pudo inicializar Twilio: {e}")
 
-# --- INICIALIZACIÓN DE ESTADO ---
 def initialize_session_state():
     if "autenticado" not in st.session_state:
         st.session_state.autenticado = False
@@ -425,6 +446,8 @@ def initialize_session_state():
         st.session_state.rol = None
     if "user_id" not in st.session_state:
         st.session_state.user_id = None
+    if "empresa_id" not in st.session_state:
+        st.session_state.empresa_id = None
     
     if "messages" not in st.session_state:
         st.session_state.messages = []
@@ -440,27 +463,44 @@ def initialize_session_state():
 
 initialize_session_state()
 
-# --- GROQ HELPERS ---
 def _system_prompt():
-    # Crear prompt personalizado basado en el contexto del usuario
     base_prompt = "Eres un asistente AI llamado Zero. Sé conciso, profesional y útil."
+
+    # Añadir contexto de empresa si existe en sesión
+    empresa_info_text = ""
+    try:
+        empresa_id = st.session_state.get("empresa_id")
+        if empresa_id:
+            empresa = db.get_company_by_id(empresa_id)
+            if empresa:
+                nombre_emp = empresa.get("nombre") or empresa.get("slug") or str(empresa_id)
+                empresa_info_text += f"\n\nEmpresa activa: {nombre_emp}."
+                # Añadir resumen de políticas/contexto de empresa si disponible
+                ctx_list = db.get_company_context(empresa_id)
+                if ctx_list:
+                    sample_items = ctx_list[:2]
+                    resumen = "; ".join([(item.get("context_value") or item.get("content") or "")[:120] for item in sample_items])
+                    if resumen.strip():
+                        empresa_info_text += f" Políticas relevantes (resumen): {resumen}"
+    except Exception:
+        pass
     
-    # Agregar contexto de archivos si existe
+    # Añadir contexto personalizado del usuario
     if st.session_state.get("user_context"):
         context_info = "\n\nContexto personalizado del usuario:\n"
-        # Últimos 5 contextos
         for ctx in st.session_state.user_context[-5:]:
-            context_info += f"- {ctx['context_key']}: {ctx['context_value'][:200]}...\n"
+            try:
+                key = ctx.get('context_key', 'contexto')
+                val = ctx.get('context_value', '')
+            except Exception:
+                key, val = 'contexto', str(ctx)
+            context_info += f"- {key}: {str(val)[:200]}...\n"
         base_prompt += context_info
-    
-    return {"role": "system", "content": base_prompt}
+
+    return {"role": "system", "content": base_prompt + empresa_info_text}
 
 def groq_chat_stream(history_messages, *, model=None, max_tokens=1200, temperature=0.7):
-    """
-    Streaming SSE con requests.iter_lines() (sin SDK extra).
-    Devuelve un generador de "delta" (fragmentos de texto) como en OpenAI.
-    """
-    m = model or GROQ_TEXT_MODEL
+    m = _company_model(model or GROQ_TEXT_MODEL)
     payload = {
         "model": m,
         "messages": [_system_prompt()] + history_messages,
@@ -469,7 +509,7 @@ def groq_chat_stream(history_messages, *, model=None, max_tokens=1200, temperatu
         "stream": True,
     }
     try:
-        with requests.post(API_URL, headers=STREAM_HEADERS, json=payload, stream=True, timeout=300) as r:
+        with requests.post(API_URL, headers=_company_ai_headers(True), json=payload, stream=True, timeout=300) as r:
             r.raise_for_status()
             for raw in r.iter_lines(decode_unicode=True):
                 if not raw:
@@ -482,7 +522,6 @@ def groq_chat_stream(history_messages, *, model=None, max_tokens=1200, temperatu
                         obj = json.loads(data)
                         delta = obj["choices"][0]["delta"].get("content")
                         if delta:
-                            # FIX ENCODING por si llega interpretado raro
                             yield safe_text(delta)
                     except Exception:
                         continue
@@ -492,9 +531,6 @@ def groq_chat_stream(history_messages, *, model=None, max_tokens=1200, temperatu
         yield safe_text(f"⚠️ Error en streaming: {e}")
 
 def groq_chat_nonstream(history_messages, *, model=None, max_tokens=1200, temperature=0.7):
-    """
-    Llamada normal (no streaming) al endpoint OpenAI-compatible de Groq.
-    """
     m = model or GROQ_TEXT_MODEL
     payload = {
         "model": m,
@@ -511,9 +547,7 @@ def groq_chat_nonstream(history_messages, *, model=None, max_tokens=1200, temper
     except Exception as e:
         return safe_text(f"⚠️ Error en la conexión: {e}")
 
-# --- FUNCIONES UTILITARIAS UI ---
 def display_message(role, content):
-    """Muestra un mensaje en el chat con el estilo adecuado."""
     if role == "assistant":
         clean_content = safe_text(str(content)).replace("Zero:", "").strip()
         st.markdown(
@@ -527,12 +561,10 @@ def display_message(role, content):
         )
 
 def save_current_chat():
-    """Guarda el chat actual en el historial y DB."""
     if st.session_state.messages and st.session_state.get("usuario") and st.session_state.get("user_id"):
         first_message = st.session_state.messages[0]["content"] if st.session_state.messages else "Nuevo chat"
         title = first_message[:30] + "..." if len(first_message) > 30 else first_message
         
-        # Actualizar en session_state
         if st.session_state.usuario not in st.session_state.chat_history:
             st.session_state.chat_history[st.session_state.usuario] = {}
         st.session_state.chat_history[st.session_state.usuario][st.session_state.current_chat] = {
@@ -540,9 +572,7 @@ def save_current_chat():
             "messages": st.session_state.messages.copy(),
         }
 
-        # Asegurar que el chat exista en DB
         try:
-            # Intentar actualizar título; si el chat no existe, crearlo
             db.update_chat_title(st.session_state.current_chat, safe_text(title))
         except Exception:
             pass
@@ -552,7 +582,6 @@ def save_current_chat():
         else:
             db.update_chat_title(st.session_state.current_chat, safe_text(title))
         
-        # Guardar mensajes (nota: simple, puede duplicar si llamas muchas veces)
         for message in st.session_state.messages:
             db.add_message(
                 st.session_state.current_chat,
@@ -561,17 +590,13 @@ def save_current_chat():
             )
 
 def load_chat(chat_id):
-    """Carga un chat del historial."""
     if "usuario" in st.session_state and chat_id in st.session_state.chat_history.get(st.session_state.usuario, {}):
         st.session_state.current_chat = chat_id
         st.session_state.messages = st.session_state.chat_history[st.session_state.usuario][chat_id]["messages"].copy()
         st.rerun()
 
-# --- SIDEBAR ZERO MEJORADO ---
 def create_sidebar():
-    """Crea la barra lateral con diseño Zero mejorado"""
     with st.sidebar:
-        # Header del sidebar
         username = st.session_state.get('usuario') or 'Invitado'
         st.markdown(f"""
             <div class="sidebar-header">
@@ -584,50 +609,94 @@ def create_sidebar():
                 </div>
             </div>
         """, unsafe_allow_html=True)
-        
-        # Botón nuevo chat morado
+
+        if "selected_chats" not in st.session_state:
+            st.session_state.selected_chats = set()
+
+        if st.session_state.selected_chats:
+            col_del = st.columns([1])[0]
+            with col_del:
+                btn_style = """
+                    <style>
+                    .delete-selected-btn button {
+                        width: 100% !important;
+                        background: linear-gradient(90deg,#a78bfa 0%,#8b5cf6 100%) !important;
+                        color: white !important;
+                        font-weight: 600 !important;
+                        border-radius: 10px !important;
+                        font-size: 1rem !important;
+                        margin-bottom: 0.5rem;
+                        display: flex !important;
+                        align-items: center !important;
+                        justify-content: center !important;
+                        gap: 0.5rem !important;
+                    }
+                    </style>
+                """
+                st.markdown(btn_style, unsafe_allow_html=True)
+                if st.button("🗑️ Eliminar seleccionadas", key="delete_selected_chats", use_container_width=True, help="Eliminar todas las conversaciones seleccionadas", type="secondary"):
+                    for chat_id in list(st.session_state.selected_chats):
+                        db.delete_chat(chat_id, st.session_state.user_id)
+                        st.session_state.selected_chats.remove(chat_id)
+                    st.session_state.chat_history = {}
+                    st.session_state.messages = []
+                    st.success("Conversaciones eliminadas")
+                    st.rerun()
+                st.markdown(f"<span style='color:var(--text-muted);font-size:0.9rem;'>({len(st.session_state.selected_chats)} seleccionadas)</span>", unsafe_allow_html=True)
+
         if st.button("Nuevo Chat", key="new_chat_btn", use_container_width=True, type="primary"):
             save_current_chat()
             st.session_state.current_chat = str(uuid.uuid4())
             st.session_state.messages = []
             st.rerun()
-        
-        # Sección de chats anteriores
+
         st.markdown('<div class="sidebar-section">', unsafe_allow_html=True)
         st.markdown('<div class="section-title">Conversaciones</div>', unsafe_allow_html=True)
-        
+
         if st.session_state.get("user_id"):
             try:
                 user_chats = db.get_user_chats(st.session_state.user_id)
                 if user_chats:
                     user_chats.sort(key=lambda x: x.get('created_at', ''), reverse=True)
-                    
                     for chat in user_chats[:8]:
                         is_active = chat['id'] == st.session_state.current_chat
                         title_val = chat.get('title') or "Nuevo chat"
                         preview = title_val[:25] + "..." if len(title_val) > 25 else title_val
-                        
-                        if st.button(
-                            preview,
-                            key=f"chat_{chat['id']}",
-                            use_container_width=True,
-                            type="primary" if is_active else "secondary"
-                        ):
-                            st.session_state.current_chat = chat['id']
-                            chat_messages = db.get_chat_messages(chat['id'])
-                            st.session_state.messages = [
-                                {"role": msg['role'], "content": msg['content']}
-                                for msg in chat_messages
-                            ]
-                            st.rerun()
+
+                        col1, col2 = st.columns([1, 8])
+                        with col1:
+                            checked = chat['id'] in st.session_state.selected_chats
+                            select = st.checkbox(
+                                "",
+                                value=checked,
+                                key=f"select_chat_{chat['id']}",
+                                label_visibility="collapsed"
+                            )
+                            if select:
+                                st.session_state.selected_chats.add(chat['id'])
+                            else:
+                                st.session_state.selected_chats.discard(chat['id'])
+                        with col2:
+                            if st.button(
+                                preview,
+                                key=f"chat_{chat['id']}",
+                                use_container_width=True,
+                                type="primary" if is_active else "secondary"
+                            ):
+                                st.session_state.current_chat = chat['id']
+                                chat_messages = db.get_chat_messages(chat['id'])
+                                st.session_state.messages = [
+                                    {"role": msg['role'], "content": msg['content']}
+                                    for msg in chat_messages
+                                ]
+                                st.rerun()
                 else:
                     st.info("Inicia tu primera conversación")
             except Exception as e:
                 st.error("Error cargando conversaciones")
-        
+
         st.markdown('</div>', unsafe_allow_html=True)
         
-        # Sección de archivos
         st.markdown('<div class="sidebar-section">', unsafe_allow_html=True)
         st.markdown('<div class="section-title">Archivos</div>', unsafe_allow_html=True)
         
@@ -652,7 +721,6 @@ def create_sidebar():
         
         st.markdown('</div>', unsafe_allow_html=True)
         
-        # Navegación principal con botones morados
         st.markdown('<div class="sidebar-section">', unsafe_allow_html=True)
         st.markdown('<div class="section-title">Navegación</div>', unsafe_allow_html=True)
         
@@ -664,7 +732,6 @@ def create_sidebar():
             st.session_state.current_page = "files"
             st.rerun()
 
-        # NUEVO: Botón PQRS
         if st.button("PQRS", key="nav_pqrs", use_container_width=True, type="primary"):
             st.session_state.current_page = "pqrs"
             st.rerun()
@@ -676,24 +743,20 @@ def create_sidebar():
 
         st.markdown('</div>', unsafe_allow_html=True)
 
-        # Footer del sidebar
         st.markdown("---")
-        # Cerrar sesión en la misma pestaña (target="_self")
-        st.markdown(
-            '''
-            <a href="https://zero-va.com/logout" target="_self"
-               style="display:block;text-align:center;padding:0.875rem 1.5rem;border-radius:12px;
-                      background:linear-gradient(135deg,#8b5cf6 0%,#a78bfa 100%);
-                      color:white;text-decoration:none;font-weight:600;">
-                Cerrar Sesión
-            </a>
-            ''',
-            unsafe_allow_html=True
-        )
+        if st.button("Cerrar Sesión", key="logout_btn", use_container_width=True, type="primary"):
+            try:
+                # Cerrar sesión local (Streamlit)
+                logout()
+                # Cerrar sesión backend (Flask) para limpiar cookie
+                try:
+                    requests.get(f"{PUBLIC_SITE_URL}/logout", timeout=3)
+                except Exception:
+                    pass
+            finally:
+                st.rerun()
 
-# --- SISTEMA DE ARCHIVOS ---
 def analyze_document_with_groq(content, filename):
-    """Analiza documentos con Groq"""
     try:
         content_preview = content[:3000]
         
@@ -717,13 +780,13 @@ def analyze_document_with_groq(content, filename):
         """
 
         payload = {
-            "model": GROQ_TEXT_MODEL,
+            "model": _company_model(GROQ_TEXT_MODEL),
             "messages": [{"role": "user", "content": prompt}],
             "max_tokens": 1200,
             "temperature": 0.3
         }
 
-        response = requests.post(API_URL, headers=BASE_HEADERS, json=payload, timeout=60)
+        response = requests.post(API_URL, headers=_company_ai_headers(False), json=payload, timeout=60)
         
         if response.status_code == 200:
             result = response.json()
@@ -735,10 +798,9 @@ def analyze_document_with_groq(content, filename):
         return f"Documento procesado: {filename}"
 
 def analyze_image_with_groq(image_base64, filename):
-    """Analiza imágenes con Groq Vision"""
     try:
         payload = {
-            "model": GROQ_VISION_MODEL,
+            "model": _company_model(GROQ_VISION_MODEL),
             "messages": [
                 {
                     "role": "user",
@@ -772,7 +834,7 @@ Elementos notables o importantes"""
             "temperature": 0.3
         }
         
-        response = requests.post(API_URL, headers=BASE_HEADERS, json=payload, timeout=60)
+        response = requests.post(API_URL, headers=_company_ai_headers(False), json=payload, timeout=60)
         
         if response.status_code == 200:
             result = response.json()
@@ -784,7 +846,6 @@ Elementos notables o importantes"""
         return f"Imagen procesada: {filename}"
 
 def save_uploaded_file(uploaded_file):
-    """Guarda y procesa archivos subidos"""
     try:
         file_type = uploaded_file.name.split('.')[-1].lower()
         file_types = {
@@ -797,22 +858,61 @@ def save_uploaded_file(uploaded_file):
         if file_type == 'unknown':
             return None, "Tipo de archivo no soportado"
 
-        user_dir = f"user_uploads/{st.session_state.user_id}"
-        os.makedirs(user_dir, exist_ok=True)
-        file_path = os.path.join(user_dir, uploaded_file.name)
+        empresa_id = st.session_state.get("empresa_id")
+        encrypt_enabled = False
+        if empresa_id:
+            try:
+                settings = db.get_company_settings(empresa_id)
+                encrypt_enabled = bool(settings.get("encrypt_files"))
+                if encrypt_enabled:
+                    db.ensure_empresa_key(empresa_id)
+            except Exception:
+                encrypt_enabled = False
 
-        with open(file_path, "wb") as f:
-            f.write(uploaded_file.getbuffer())
+        user_id = st.session_state.user_id
+        base_dir = "user_uploads_enc" if encrypt_enabled else "user_uploads"
+        user_dir = os.path.join(base_dir, str(user_id))
+        os.makedirs(user_dir, exist_ok=True)
+        safe_name = uploaded_file.name
+        file_path = os.path.join(user_dir, safe_name + (".enc" if encrypt_enabled else ""))
+
+        raw_bytes = uploaded_file.getvalue()
+
+        if encrypt_enabled:
+            data_key = db.get_active_empresa_key(empresa_id)
+            if not data_key:
+                # Fallback: guardar sin cifrado si no hay clave activa
+                encrypt_enabled = False
+                base_dir = "user_uploads"
+                user_dir = os.path.join(base_dir, str(user_id))
+                os.makedirs(user_dir, exist_ok=True)
+                file_path = os.path.join(user_dir, safe_name)
+                with open(file_path, "wb") as f:
+                    f.write(raw_bytes)
+                try:
+                    st.warning("No hay clave activa de cifrado; archivo guardado sin cifrado.")
+                except Exception:
+                    pass
+            else:
+                aes = AESGCM(data_key)
+                nonce = os.urandom(12)
+                aad = f"{empresa_id}:{user_id}".encode()
+                ciphertext = aes.encrypt(nonce, raw_bytes, associated_data=aad)
+                with open(file_path, "wb") as f:
+                    f.write(nonce + ciphertext)
+        else:
+            with open(file_path, "wb") as f:
+                f.write(raw_bytes)
 
         content = ""
         analysis = ""
         
         if file_type == 'image':
-            image_base64 = b64encode(uploaded_file.getvalue()).decode('utf-8')
+            image_base64 = b64encode(raw_bytes).decode('utf-8')
             analysis = analyze_image_with_groq(image_base64, uploaded_file.name)
             content = "Imagen procesada para análisis visual"
         else:
-            file_content = uploaded_file.getvalue()
+            file_content = raw_bytes
             
             if file_type in ['pdf', 'word']:
                 processor = FileProcessor()
@@ -830,27 +930,376 @@ def save_uploaded_file(uploaded_file):
                 analysis = f"Documento procesado: {uploaded_file.name}"
 
         file_id = db.save_file(
-            user_id=st.session_state.user_id,
+            user_id=user_id,
             filename=uploaded_file.name,
             file_path=file_path,
             file_type=file_type,
             file_size=uploaded_file.size,
             content_extracted=content,
-            analysis_summary=analysis[:350]
+            analysis_summary=(analysis or "")[:350]
         )
 
         if analysis:
             context_key = f"Archivo: {uploaded_file.name}"
-            db.save_user_context(st.session_state.user_id, context_key, analysis, file_id)
+            db.save_user_context(user_id, context_key, analysis, file_id)
 
         return file_id, None
 
     except Exception as e:
         return None, f"Error procesando archivo: {str(e)}"
 
-# --- PROCESAMIENTO DE ECUACIONES ---
+def is_advice_question(prompt: str) -> bool:
+    norm = normalize_str(prompt)
+    intents = [
+        "como puedo", "cómo puedo", "como hacer", "cómo hacer",
+        "recomendacion", "recomendación", "recomendaciones",
+        "sugerencia", "sugerencias",
+        "estrategia", "guia", "guía",
+        "pasos", "buenas practicas", "buenas prácticas",
+        "ideas", "alternativas", "riesgos",
+        "plan", "que hacer", "qué hacer",
+        "mejorar", "optimizar", "explicame", "explícame", "explicacion", "explicación"
+    ]
+    return any(k in norm for k in intents)
+
+def is_greeting_or_smalltalk(prompt: str) -> bool:
+    norm = normalize_str(prompt)
+    intents = [
+        "hola", "buenos dias", "buenas tardes", "buenas noches",
+        "que tal", "qué tal", "como estas", "cómo estás", "hey",
+        "hi", "hello", "saludos"
+    ]
+    if len(norm.split()) <= 3 and any(k in norm for k in intents):
+        return True
+    return any(k in norm for k in intents)
+
+def is_analysis_question(prompt: str) -> bool:
+    norm = normalize_str(prompt)
+    intents = [
+        "analiza", "analisis", "análisis",
+        "compara", "comparacion", "comparación",
+        "resume", "resumen", "sintetiza", "desglosa", "detalla",
+        "extrae", "extraer", "identifica", "clasifica",
+        "calcula", "grafica", "gráfico", "grafico",
+        "que dice", "qué dice", "que contiene", "qué contiene",
+        "busca en el documento", "buscar en el documento"
+    ]
+    return any(k in norm for k in intents)
+
+def generate_advice_response(prompt: str, user_id: int | None, recent_messages: list[dict]) -> str:
+    try:
+        convo = []
+        for m in recent_messages[-8:]:
+            role = m.get("role", "user")
+            content = (m.get("content") or "").strip()
+            if content:
+                convo.append(f"{role.upper()}: {content}")
+        contexto = "\n".join(convo)
+
+        instrucciones = (
+            "Eres un asesor en español. Da recomendaciones claras y accionables.\n"
+            "- Basarte en el contexto reciente del chat (no inventes datos).\n"
+            "- Estructura en pasos, quick wins y métricas a monitorear.\n"
+            "- Incluye riesgos/consideraciones y alternativas.\n"
+            "- Si faltan datos, indica qué pedir o calcular del documento.\n"
+        )
+        prompt_llm = (
+            f"{instrucciones}\n\nPregunta del usuario:\n{prompt}\n\n"
+            f"=== CONTEXTO RECIENTE ===\n{contexto}\n=== FIN CONTEXTO ==="
+        )
+
+        resp = analyze_document_with_groq(prompt_llm, "asesoria_estrategica")
+        if not resp or not resp.strip():
+            return ""
+
+        try:
+            resp = rewrite_with_editor(resp, "Formato claro, pasos accionables y métricas.")
+        except Exception:
+            pass
+
+        return resp.strip()
+    except Exception:
+        return ""
+
+def chunk_text(text: str, max_chars: int = 1200, overlap: int = 200) -> list[str]:
+    t = (text or "")
+    if len(t) <= max_chars:
+        return [t]
+    chunks = []
+    start = 0
+    while start < len(t):
+        end = min(start + max_chars, len(t))
+        chunks.append(t[start:end])
+        if end == len(t):
+            break
+        start = max(0, end - overlap)
+    return chunks
+
+def _spanish_stopwords() -> set[str]:
+    return {
+        "el","la","los","las","un","una","unos","unas","de","del","al","y","o","u",
+        "que","qué","cuál","cual","donde","dónde","como","cómo","en","por","para",
+        "a","con","sin","se","su","sus","mi","mis","tu","tus","lo","le","les","es",
+        "hay","tengo","tienes","tener","esto","eso","aqui","aquí","alli","allí"
+    }
+
+import difflib
+
+def extract_keywords(query: str) -> list[str]:
+    q = normalize_str(query or "")
+    stops = _spanish_stopwords()
+    return [t for t in q.split() if t not in stops and len(t) > 2]
+
+def fuzzy_contains(haystack: str, needle: str, threshold: float = 0.82) -> bool:
+    h = normalize_str(haystack)
+    n = normalize_str(needle)
+    if n in h:
+        return True
+    return difflib.SequenceMatcher(None, h, n).ratio() >= threshold
+
+def _score_chunk(norm_chunk: str, norm_query: str, name: str) -> int:
+    tokens = extract_keywords(norm_query)
+    score = 0
+    for t in tokens:
+        if t in norm_chunk:
+            score += 2
+        elif fuzzy_contains(norm_chunk, t, 0.88):
+            score += 1
+        if t in normalize_str(name) or fuzzy_contains(name, t, 0.88):
+            score += 3
+    return score
+
+def sync_user_files_from_disk(user_id: int):
+    base_dirs = [os.path.join("user_uploads", str(user_id)), os.path.join("uploads", str(user_id))]
+    try:
+        existing = db.get_user_files(user_id)
+        existing_paths = {f.get("file_path") for f in existing if f.get("file_path")}
+    except Exception:
+        existing_paths = set()
+
+    ext_map = {
+        'pdf': 'pdf', 'docx': 'word', 'doc': 'word', 'txt': 'text',
+        'md': 'markdown', 'xlsx': 'excel', 'xls': 'excel', 'csv': 'csv',
+        'jpg': 'image', 'jpeg': 'image', 'png': 'image', 'gif': 'image'
+    }
+
+    for base_dir in base_dirs:
+        if not os.path.isdir(base_dir):
+            continue
+        for name in os.listdir(base_dir):
+            path = os.path.join(base_dir, name)
+            if not os.path.isfile(path):
+                continue
+            if path in existing_paths:
+                continue
+
+            ext = name.split('.')[-1].lower()
+            file_type = ext_map.get(ext, 'unknown')
+            if file_type == 'unknown':
+                continue
+
+            try:
+                with open(path, "rb") as f:
+                    data = f.read()
+                content = ""
+                analysis = ""
+                if file_type in ['pdf', 'word']:
+                    processor = FileProcessor()
+                    result = processor.process_file(data, name)
+                    content = (result.get('content') or "")[:8000]
+                else:
+                    try:
+                        content = data.decode('utf-8', errors='ignore')[:8000]
+                    except Exception:
+                        content = data.decode('latin-1', errors='ignore')[:8000]
+
+                if content and len(content.strip()) > 50:
+                    try:
+                        analysis = analyze_document_with_groq(content, name)
+                    except Exception:
+                        analysis = f"Documento indexado: {name}"
+                else:
+                    analysis = f"Documento indexado: {name}"
+
+                db.save_file(
+                    user_id=user_id,
+                    filename=name,
+                    file_path=path,
+                    file_type=file_type,
+                    file_size=os.path.getsize(path),
+                    content_extracted=content,
+                    analysis_summary=(analysis or "")[:350]
+                )
+            except Exception:
+                continue
+
+def search_user_documents(user_id: int, query: str):
+    q = normalize_str((query or "").strip())
+    if not q:
+        return []
+
+    try:
+        files = db.get_user_files(user_id)
+    except Exception:
+        files = []
+
+    results = []
+    for f in files:
+        name = normalize_str(f.get("filename") or "")
+        content = normalize_str(f.get("content_extracted") or "")
+        score = 0
+        if q in name:
+            score += 2
+        if q in content:
+            score += 1
+        if score > 0:
+            results.append((score, f))
+
+    results.sort(key=lambda x: x[0], reverse=True)
+    return [r[1] for r in results]
+
+def maybe_answer_doc_query(prompt: str, user_id: int | None):
+    text = (prompt or "")
+    norm = normalize_str(text)
+    intents = [
+        "que libro", "qué libro", "que documentos", "qué documentos",
+        "que archivo", "qué archivo", "donde esta", "dónde está",
+        "donde lo encuentro", "dónde lo encuentro", "que tengo", "qué tengo",
+        "buscar", "lista de archivos", "listar archivos"
+    ]
+    if not any(k in norm for k in intents):
+        return None
+
+    if not user_id:
+        return "No encuentro tu sesión de usuario. Inicia sesión para buscar en tus documentos."
+
+    matches = search_user_documents(user_id, text)
+    if not matches:
+        return "No encuentro coincidencias en tus documentos. Prueba con el nombre o tema exacto."
+
+    lines = []
+    for f in matches[:8]:
+        ruta = f.get("file_path") or f"user_uploads/{user_id}/{f.get('filename')}"
+        lines.append(f"- {f.get('filename')} (lo encuentras en: {ruta})")
+
+    header = "Encontré estos documentos:\n" if len(matches) > 1 else "Encontré este documento:\n"
+    return header + "\n".join(lines)
+
+def rewrite_with_editor(text: str, instrucciones: str | None = None) -> str:
+    try:
+        if not text or not text.strip():
+            return text
+
+        if is_greeting_or_smalltalk(text) or len(text.strip()) < 20:
+            return text
+
+        cleaned = re.sub(
+            r"^\s*\*\*An[aá]lisis del Documento.*?\*\*\s*",
+            "",
+            text,
+            flags=re.IGNORECASE | re.MULTILINE
+        )
+
+        return cleaned.strip()
+    except Exception:
+        return text
+
+def answer_with_docs(prompt: str, user_id: int) -> str | None:
+    if is_greeting_or_smalltalk(prompt) or not is_analysis_question(prompt):
+        return None
+
+    try:
+        files = db.get_user_files(user_id)
+    except Exception:
+        files = []
+
+    norm_q = normalize_str(prompt)
+    candidates = []
+    for f in files:
+        name = f.get("filename") or ""
+        path = f.get("file_path") or f"user_uploads/{user_id}/{name}"
+        content = f.get("content_extracted") or ""
+        if not content:
+            continue
+        for ch in chunk_text(content):
+            norm_ch = normalize_str(ch)
+            score = _score_chunk(norm_ch, norm_q, name)
+            if score > 0:
+                candidates.append((score, ch, name, path))
+
+    if not candidates:
+        suggestions = search_user_documents(user_id, prompt)
+        if suggestions:
+            posibles = "\n".join([f"- {s.get('filename')} (ruta: {s.get('file_path')})" for s in suggestions[:6]])
+            return (
+                "No encuentro texto relevante en los documentos actuales para responder.\n"
+                "Podría estar en alguno de estos archivos:\n" + posibles
+            )
+        return None
+
+    candidates.sort(key=lambda x: x[0], reverse=True)
+    top = candidates[:8]
+
+    if top[0][0] < 3 and len(top) < 3:
+        suggestions = search_user_documents(user_id, prompt)
+        if suggestions:
+            posibles = "\n".join([f"- {s.get('filename')} (ruta: {s.get('file_path')})" for s in suggestions[:6]])
+            return (
+                "El contexto recuperado es insuficiente para una respuesta fiable.\n"
+                "Podría estar en:\n" + posibles
+            )
+        return None
+
+    contexto = "\n\n".join([f"Fuente: {n}\nRuta: {p}\nContenido:\n{ch}" for _, ch, n, p in top])
+    fuentes_unicas = []
+    vistos = set()
+    for _, _, n, p in top:
+        key = (n, p)
+        if key not in vistos:
+            vistos.add(key)
+            fuentes_unicas.append((n, p))
+
+    instrucciones = (
+        "Responde EXCLUSIVAMENTE usando el texto provisto en CONTEXTO.\n"
+        "Reglas estrictas:\n"
+        "1) Usa SOLO el texto dado de los documentos.\n"
+        "2) Si hay información relacionada en varios documentos, combina la evidencia y cita sus nombres.\n"
+        "3) Si el documento no menciona explícitamente el tema, dilo claramente.\n"
+        "4) Considera variaciones ortográficas/semánticas al interpretar el texto, pero NO inventes información.\n"
+        "5) Si no hay información suficiente, sugiere posibles archivos donde podría estar la respuesta.\n"
+        "- Cita al final las 'Fuentes' con nombre y ruta.\n"
+        "- Si el contexto entra en conflicto, explica la discrepancia brevemente.\n"
+    )
+    prompt_llm = (
+        f"{instrucciones}\n\nPregunta del usuario:\n{prompt}\n\n=== CONTEXTO ===\n{contexto}\n=== FIN CONTEXTO ==="
+    )
+
+    try:
+        respuesta = analyze_document_with_groq(prompt_llm, "consulta_documentos")
+    except Exception:
+        respuesta = None
+
+    if not respuesta or not respuesta.strip():
+        suggestions = search_user_documents(user_id, prompt)
+        if suggestions:
+            posibles = "\n".join([f"- {s.get('filename')} (ruta: {s.get('file_path')})" for s in suggestions[:6]])
+            return (
+                "No fue posible redactar una respuesta solo con el contexto disponible.\n"
+                "Podría estar en:\n" + posibles
+            )
+        return None
+
+    fuentes_txt = "\n".join([f"- {n} (ruta: {p})" for n, p in fuentes_unicas])
+    respuesta_final = respuesta.strip() + "\n\nFuentes:\n" + fuentes_txt
+
+    try:
+        respuesta_final = rewrite_with_editor(respuesta_final, "Mantén nombres y rutas exactas; sin encabezados tipo informe.")
+    except Exception:
+        pass
+
+    return respuesta_final
+
 def render_latex_in_message(content):
-    """Convierte ecuaciones LaTeX en formato legible"""
     inline_pattern = r'\$(.*?)\$'
     block_pattern = r'\$\$(.*?)\$\$'
     
@@ -859,11 +1308,7 @@ def render_latex_in_message(content):
     
     return content
 
-# --- PÁGINA PRINCIPAL DEL CHAT ---
 def chat_page():
-    """Página principal del chat con diseño Zero"""
-    
-    # Header
     st.markdown("""
         <div class="main-header">
             <div style="display: flex; align-items: center; gap: 1rem;">
@@ -880,10 +1325,8 @@ def chat_page():
         </div>
     """, unsafe_allow_html=True)
     
-    # Contenedor del chat
     st.markdown('<div class="chat-container">', unsafe_allow_html=True)
     
-    # Mostrar mensajes
     if st.session_state.messages:
         for message in st.session_state.messages:
             avatar = "👤" if message["role"] == "user" else "⚡"
@@ -901,7 +1344,6 @@ def chat_page():
                 </div>
             """, unsafe_allow_html=True)
     else:
-        # Mensaje de bienvenida
         st.markdown("""
             <div style="text-align: center; padding: 4rem 2rem; color: var(--text-muted);">
                 <div style="font-size: 6rem; margin-bottom: 2rem;">⚡</div>
@@ -934,16 +1376,58 @@ def chat_page():
     
     st.markdown('</div>', unsafe_allow_html=True)
     
-    # Input del chat
-    if prompt := st.chat_input("Escribe tu mensaje..."):
+    prompt = st.chat_input(
+        "Escribe tu mensaje...",
+        key=f"chat_input_{st.session_state.get('user_id','anon')}_{st.session_state.get('current_chat','default')}"
+    )
+    if prompt:
+        with st.chat_message("user"):
+            st.markdown(prompt)
         st.session_state.messages.append({"role": "user", "content": prompt})
-        
+
+        if is_greeting_or_smalltalk(prompt):
+            pass
+        else:
+            local = maybe_answer_doc_query(prompt, st.session_state.get("user_id"))
+            if local:
+                try:
+                    local = rewrite_with_editor(local, "Mantén el listado y rutas tal cual.")
+                except Exception:
+                    pass
+                st.session_state.messages.append({"role": "assistant", "content": local})
+                save_current_chat()
+                st.rerun()
+                return
+
+            if st.session_state.get("user_id") and is_analysis_question(prompt):
+                doc_answer = answer_with_docs(prompt, st.session_state.user_id)
+                if doc_answer:
+                    st.session_state.messages.append({"role": "assistant", "content": doc_answer})
+                    save_current_chat()
+                    st.rerun()
+                    return
+
+            if is_advice_question(prompt):
+                advice = generate_advice_response(
+                    prompt,
+                    st.session_state.get("user_id"),
+                    st.session_state.messages
+                )
+                if advice:
+                    st.session_state.messages.append({"role": "assistant", "content": advice})
+                    save_current_chat()
+                    st.rerun()
+                    return
+
+        with st.chat_message("assistant"):
+            message_placeholder = st.empty()
+            full_response = ""
+
         with st.chat_message("assistant"):
             message_placeholder = st.empty()
             full_response = ""
             
             try:
-                # Mostrar animación de typing
                 message_placeholder.markdown("""
                     <div style="display: flex; align-items: center; gap: 0.5rem; color: var(--text-muted);">
                         <div style="display: flex; gap: 3px;">
@@ -961,22 +1445,28 @@ def chat_page():
                     </style>
                 """, unsafe_allow_html=True)
                 
-                # Pre-chequeo de clave
-                if not GROQ_API_KEY:
-                    full_response = "GROQ_API_KEY no configurada en el entorno de Streamlit. Verifica tu archivo .env o variables del sistema."
+                # Determinar API key a usar (empresa → global)
+                current_api_key = GROQ_API_KEY
+                try:
+                    emp = db.get_company_by_id(st.session_state.get("empresa_id")) if st.session_state.get("empresa_id") else None
+                    if emp and emp.get("groq_api_key"):
+                        current_api_key = emp.get("groq_api_key")
+                except Exception:
+                    pass
+
+                if not current_api_key:
+                    full_response = "GROQ_API_KEY no configurada para esta empresa ni globalmente. Configura una API key."
                     message_placeholder.markdown(full_response)
                 else:
-                    messages_for_api = st.session_state.messages.copy()
-                    
+                    messages_for_api = [_system_prompt()] + st.session_state.messages.copy()
                     payload = {
-                        "model": GROQ_TEXT_MODEL,
+                        "model": _company_model(GROQ_TEXT_MODEL),
                         "messages": messages_for_api,
                         "stream": True,
                         "max_tokens": 2000,
                         "temperature": 0.7
                     }
-                    
-                    response = requests.post(API_URL, headers=STREAM_HEADERS, json=payload, stream=True, timeout=120)
+                    response = requests.post(API_URL, headers=_company_ai_headers(True), json=payload, stream=True, timeout=120)
                     
                     if response.status_code == 200:
                         for line in response.iter_lines():
@@ -996,13 +1486,18 @@ def chat_page():
                                                 message_placeholder.markdown(response_with_math, unsafe_allow_html=True)
                                     except:
                                         continue
-                        # Si no hubo contenido, informar
                         if not full_response.strip():
                             full_response = "La IA no devolvió contenido. Revisa el modelo o reintenta."
+                        try:
+                            if is_analysis_question(prompt) or is_advice_question(prompt):
+                                final = rewrite_with_editor(full_response)
+                                if final:
+                                    full_response = final
+                        except Exception:
+                            pass
                         final_response = render_latex_in_message(full_response)
                         message_placeholder.markdown(final_response, unsafe_allow_html=True)
                     else:
-                        # Mensajes de error específicos y detalle
                         try:
                             body = response.text[:300]
                         except:
@@ -1023,9 +1518,7 @@ def chat_page():
         save_current_chat()
         st.rerun()
 
-# --- PÁGINAS EXISTENTES MEJORADAS ---
 def image_page():
-    """Página de análisis de imágenes mejorada"""
     st.title("🖼️ Análisis de Imágenes")
     st.write("Sube una imagen para que Zero la analice usando Groq Vision.")
     
@@ -1035,30 +1528,26 @@ def image_page():
     )
     
     if uploaded_file is not None:
-        # Mostrar imagen
         image = Image.open(uploaded_file)
         st.image(image, caption=uploaded_file.name, use_column_width=True)
         
         if st.button("🔍 Analizar Imagen", type="primary"):
             with st.spinner("Analizando imagen..."):
-                # Convertir a base64
                 image_base64 = b64encode(uploaded_file.getvalue()).decode('utf-8')
                 
-                # Analizar con Groq Vision
                 analysis = analyze_image_with_groq(image_base64, uploaded_file.name)
                 
-                # Mostrar resultado
                 st.subheader("📋 Análisis de la Imagen")
                 st.write(analysis)
                 
-                # Guardar análisis si el usuario está autenticado
+                edited_analysis = rewrite_with_editor(analysis, "Mantén el análisis técnico pero hazlo más claro y conciso.")
                 if st.session_state.get("user_id"):
                     try:
                         image_disk_path = f"uploads/{st.session_state.user_id}/{uploaded_file.name}"
                         db.save_image_analysis(
                             user_id=st.session_state.user_id,
                             image_path=image_disk_path,
-                            analysis_result=analysis,
+                            analysis_result=edited_analysis,
                             model_used=GROQ_VISION_MODEL
                         )
                         st.success("✅ Análisis guardado en tu historial")
@@ -1066,11 +1555,9 @@ def image_page():
                         st.warning(f"⚠️ No se pudo guardar el análisis: {str(e)}")
 
 def audio_page():
-    """Página de transcripción de audio (función existente)"""
     st.title("🎤 Transcripción de Audio")
     st.write("Habla y Zero convertirá tu voz a texto.")
     
-    # Configuración de WebRTC
     webrtc_ctx = webrtc_streamer(
         key="speech-to-text",
         mode=WebRtcMode.SENDONLY,
@@ -1081,7 +1568,6 @@ def audio_page():
     if webrtc_ctx.audio_receiver:
         st.write("🎙️ Grabando... Habla ahora")
         
-        # Procesar audio (implementación simplificada)
         audio_frames = []
         while True:
             try:
@@ -1092,56 +1578,159 @@ def audio_page():
         
         if audio_frames:
             st.write("🔄 Procesando audio...")
-            # Aquí iría la lógica de transcripción
             st.write("📝 **Transcripción:** [Funcionalidad en desarrollo]")
 
 def register_page():
-    """Página de registro de usuarios (solo admin)"""
-    st.title("👥 Registro de Usuarios")
+    st.title("🛠️ Panel Admin")
     
     if st.session_state.get("rol") != "admin":
-        st.error("❌ Acceso denegado. Solo administradores pueden registrar usuarios.")
+        st.error("❌ Acceso denegado. Solo administradores.")
         return
     
-    with st.form("registro_form"):
-        st.subheader("Crear Nuevo Usuario")
-        
-        username = st.text_input("Nombre de usuario")
-        password = st.text_input("Contraseña", type="password")
-        confirm_password = st.text_input("Confirmar contraseña", type="password")
-        rol = st.selectbox("Rol", ["usuario", "admin"])
-        nfc_uid = st.text_input("NFC UID (opcional)")
-        
-        submitted = st.form_submit_button("Registrar Usuario")
-        
-        if submitted:
-            if not username or not password:
-                st.error("❌ Todos los campos son obligatorios")
-            elif password != confirm_password:
-                st.error("❌ Las contraseñas no coinciden")
-            elif len(password) < 6:
-                st.error("❌ La contraseña debe tener al menos 6 caracteres")
-            else:
+    # Datos iniciales
+    try:
+        companies = db.list_companies()
+    except Exception:
+        companies = []
+    try:
+        users = db.list_users()
+    except Exception:
+        users = []
+
+    tab1, tab2, tab3 = st.tabs(["Crear Empresa", "Asignar Usuario", "Empresas"])
+
+    # --- Crear Empresa ---
+    with tab1:
+        st.subheader("Nueva Empresa")
+        with st.form("form_create_company"):
+            nombre = st.text_input("Nombre")
+            slug = st.text_input("Slug (opcional)")
+            model_name = st.text_input("Modelo IA (opcional)", value=GROQ_TEXT_MODEL)
+            groq_api_key = st.text_input("Groq API Key (opcional)", type="password")
+            settings_json = st.text_area("Settings JSON (opcional)")
+
+            submitted = st.form_submit_button("Crear empresa", type="primary")
+            if submitted:
+                if not nombre.strip():
+                    st.error("Nombre es requerido")
+                else:
+                    settings = None
+                    if settings_json and settings_json.strip():
+                        try:
+                            settings = json.loads(settings_json)
+                        except Exception as e:
+                            st.warning(f"Settings inválidos: {e}")
+                    try:
+                        empresa_id = db.create_company(
+                            nombre.strip(),
+                            slug.strip() or None,
+                            settings,
+                            groq_api_key.strip() or None,
+                            model_name.strip() or None
+                        )
+                        st.success(f"Empresa creada: id {empresa_id}")
+                        companies = db.list_companies()
+                    except Exception as e:
+                        st.error(f"Error creando empresa: {e}")
+
+    # --- Asignar Usuario ---
+    with tab2:
+        st.subheader("Asignar Usuario a Empresa")
+        if not users or not companies:
+            st.info("Primero asegúrate de tener usuarios y empresas creadas.")
+        else:
+            user_opt = st.selectbox(
+                "Usuario",
+                options=[(u['id'], u['username']) for u in users],
+                format_func=lambda x: f"{x[1]} (id: {x[0]})"
+            )
+            comp_opt = st.selectbox(
+                "Empresa",
+                options=[(c['id'], c['nombre']) for c in companies],
+                format_func=lambda x: f"{x[1]} (id: {x[0]})"
+            )
+            if st.button("Asignar", type="primary"):
                 try:
-                    success = registrar_usuario(username, password, rol, nfc_uid or None)
-                    if success:
-                        st.success(f"✅ Usuario '{username}' registrado exitosamente")
+                    ok = db.assign_user_to_company(user_opt[0], comp_opt[0])
+                    if ok:
+                        st.success(f"Usuario {user_opt[1]} asignado a {comp_opt[1]}")
+                        if st.session_state.get('user_id') == user_opt[0]:
+                            st.session_state.empresa_id = comp_opt[0]
                     else:
-                        st.error("❌ Error al registrar usuario. Puede que ya exista.")
+                        st.error("No se pudo asignar usuario")
                 except Exception as e:
-                    st.error(f"❌ Error: {str(e)}")
+                    st.error(f"Error asignando: {e}")
+
+    # --- Empresas ---
+    with tab3:
+        st.subheader("Empresas registradas")
+        if not companies:
+            st.info("No hay empresas aún.")
+        else:
+            for c in companies:
+                with st.expander(f"{c.get('nombre')} (id: {c.get('id')})", expanded=False):
+                    st.write(f"Slug: {c.get('slug')}")
+                    st.write(f"Modelo: {c.get('model_name')}")
+                    # Ajustes de seguridad y cifrado por empresa
+                    try:
+                        settings = db.get_company_settings(c.get('id')) or {}
+                    except Exception:
+                        settings = {}
+                    enc_enabled = bool(settings.get("encrypt_files"))
+
+                    with st.form(f"settings_company_{c.get('id')}"):
+                        enc_checked = st.checkbox(
+                            "Encriptar archivos de esta empresa",
+                            value=enc_enabled,
+                            key=f"enc_chk_{c.get('id')}"
+                        )
+                        save_settings = st.form_submit_button("Guardar ajustes", type="primary")
+                        if save_settings:
+                            ok = db.update_company_settings(c.get('id'), {"encrypt_files": bool(enc_checked)})
+                            if ok and enc_checked:
+                                try:
+                                    db.ensure_empresa_key(c.get('id'))
+                                except Exception as e:
+                                    st.warning(f"No se pudo asegurar clave de cifrado: {e}")
+                            st.success("Ajustes actualizados")
+
+                    if enc_enabled:
+                        if st.button("Rotar clave de cifrado", key=f"rotar_{c.get('id')}"):
+                            try:
+                                v = db.rotate_empresa_key(c.get('id'))
+                                st.success(f"Clave rotada. Nueva versión: {v}")
+                            except Exception as e:
+                                st.error(f"No se pudo rotar clave: {e}")
+
+                    # Export CSV inline
+                    try:
+                        files = db.get_company_files(c.get('id'))
+                        buf = io.StringIO()
+                        writer = csv.writer(buf)
+                        writer.writerow(["file_id","user_id","filename","file_type","file_size","uploaded_at","analysis_summary"])
+                        for doc in files:
+                            writer.writerow([
+                                doc.get("id"), doc.get("user_id"), doc.get("filename"), doc.get("file_type"),
+                                doc.get("file_size"), doc.get("uploaded_at"), (doc.get("analysis_summary") or "").replace("\n"," ")
+                            ])
+                        csv_bytes = buf.getvalue().encode("utf-8")
+                        st.download_button(
+                            label="Descargar CSV de documentos",
+                            data=csv_bytes,
+                            file_name=f"empresa_{c.get('id')}_documentos.csv",
+                            mime="text/csv"
+                        )
+                    except Exception as e:
+                        st.warning(f"No se pudo generar CSV: {e}")
 
 def file_upload_page():
-    """Página para subir y gestionar archivos"""
     st.title("📁 Gestión de Archivos")
     st.write("Sube documentos e imágenes para que Zero pueda usarlos en las conversaciones.")
 
-    # Verificar que el usuario esté autenticado
     if not st.session_state.get("usuario"):
         st.error("❌ Error de sesión. Por favor, vuelve a iniciar sesión.")
         return
 
-    # Obtener user_id desde la base de datos usando el username
     username = st.session_state.usuario
     user_id = db.get_user_id_by_username(username)
 
@@ -1149,7 +1738,6 @@ def file_upload_page():
         st.error("❌ No se pudo obtener la información del usuario.")
         return
 
-    # Sección de subida de archivos
     st.subheader("📤 Subir Nuevo Archivo")
 
     uploaded_file = st.file_uploader(
@@ -1162,33 +1750,32 @@ def file_upload_page():
         st.info(f"📄 {uploaded_file.name} ({uploaded_file.size / 1024:.1f} KB)")
         if st.button("🚀 Procesar Archivo", type="primary"):
             with st.spinner("Procesando archivo..."):
-                # Guardar y procesar archivo
                 file_id, error = save_uploaded_file(uploaded_file)
                 if error:
                     st.error(f"❌ Error al procesar archivo: {error}")
                 else:
                     st.success("✅ Archivo procesado y guardado exitosamente")
-                    # Si es una imagen, realizar análisis con Groq Vision
                     if uploaded_file.type.startswith('image/'):
                         with st.spinner("Analizando imagen con Groq Vision..."):
                             image_base64 = b64encode(uploaded_file.getvalue()).decode('utf-8')
                             analysis = analyze_image_with_groq(image_base64, uploaded_file.name)
+                            # Usar la ruta real guardada (puede ser cifrada)
+                            file_rec = db.get_file_by_id(file_id)
+                            real_path = file_rec.get("file_path") if file_rec else f"user_uploads/{user_id}/{uploaded_file.name}"
                             db.save_image_analysis(
                                 user_id=user_id,
-                                image_path=f"user_uploads/{user_id}/{uploaded_file.name}",
+                                image_path=real_path,
                                 analysis_result=analysis,
-                                model_used=GROQ_VISION_MODEL,
+                                model_used=_company_model(GROQ_VISION_MODEL),
                                 archivo_id=file_id
                             )
                             context_key = f"Análisis de imagen: {uploaded_file.name}"
                             db.save_user_context(user_id, context_key, analysis, file_id)
                             st.success("🖼️ Imagen analizada con Groq Vision")
-                    # Actualizar archivos y contexto en sesión
                     st.session_state.user_files = db.get_user_files(user_id)
                     st.session_state.user_context = db.get_user_context(user_id)
                     st.rerun()
 
-    # Sección de archivos existentes
     st.subheader("📋 Archivos Subidos")
 
     if "user_files" not in st.session_state:
@@ -1223,7 +1810,6 @@ def file_upload_page():
                                 "role": "user",
                                 "content": content_message
                             })
-                            # Cambiar a página de chat de forma segura
                             st.session_state.current_page = "chat"
                             st.success(f"📄 Contenido de {file_data['filename']} agregado al chat")
                             st.rerun()
@@ -1231,24 +1817,21 @@ def file_upload_page():
         st.info("📭 No tienes archivos subidos aún. ¡Sube tu primer archivo!")
 
 def pqrs_page():
-    """Página PQRS: formulario para enviar mensaje a un correo (espacio para añadir el correo destino)."""
     st.title("📮 PQRS")
-    st.write("Escribe tu mensaje y envíalo por correo. Introduce el correo destino abajo (o utiliza el valor por defecto).")
+    st.write("Escribe tu mensaje y envíalo por correo. El mensaje será enviado automáticamente a soporte@zero-va.com.")
 
-    # Formulario simple
     with st.form("pqrs_form"):
-        dest_email = st.text_input("Correo destino (añade aquí el correo):", value=PQRS_DEFAULT_EMAIL)
-        subject = st.text_input("Asunto:", value="PQRS desde ZERO")
+        dest_email = "soporte@zero-va.com"
+        subject = st.text_input("Asunto:", value="")
         message_body = st.text_area("Mensaje:", height=200)
         submit = st.form_submit_button("Enviar mensaje")
 
     if submit:
-        if not dest_email.strip():
-            st.error("Por favor indica el correo destino.")
+        if not subject.strip():
+            st.error("Por favor indica el asunto del mensaje.")
         elif not message_body.strip():
             st.error("Escribe el mensaje antes de enviar.")
         else:
-            # Intentar enviar usando variables SMTP en .env
             SMTP_HOST = os.getenv("SMTP_HOST", "")
             SMTP_PORT = int(os.getenv("SMTP_PORT", "587") or 587)
             SMTP_USER = os.getenv("SMTP_USER", "")
@@ -1277,10 +1860,7 @@ def pqrs_page():
                     st.info("Puedes revisar la configuración SMTP en las variables de entorno o enviar el mensaje manualmente:")
                     st.code(f"Para: {dest_email}\nAsunto: {subject}\n\n{message_body}")
 
-# --- FUNCIÓN PRINCIPAL ---
 def main():
-    """Aplicación principal"""
-    # Siempre tomar el usuario desde query params si está presente
     qp = st.query_params
     usuario_qp = qp.get("usuario")
     if usuario_qp:
@@ -1289,22 +1869,21 @@ def main():
         if user_info:
             st.session_state.rol = user_info.get("rol", "usuario")
             st.session_state.user_id = user_info.get("id")
+            st.session_state.empresa_id = user_info.get("empresa_id")
 
-    # Si tenemos user_id, precargar lista de archivos del usuario
-    if st.session_state.get("user_id") and "user_files" not in st.session_state:
+    if st.session_state.get("user_id") and not st.session_state.get("files_synced"):
         try:
+            sync_user_files_from_disk(st.session_state.user_id)
             st.session_state.user_files = db.get_user_files(st.session_state.user_id)
-        except:
-            st.session_state.user_files = []
+        except Exception:
+            pass
+        st.session_state.files_synced = True
 
-    # Navegación desde sidebar
     create_sidebar()
 
-    # Determinar página actual (simplificado)
     if "current_page" not in st.session_state:
         st.session_state.current_page = "chat"
 
-    # Renderizar página seleccionada
     if st.session_state.current_page == "chat":
         chat_page()
     elif st.session_state.current_page == "files":

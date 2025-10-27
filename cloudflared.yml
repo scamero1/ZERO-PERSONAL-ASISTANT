@@ -1,6 +1,10 @@
-tunnel: ZERO
-credentials-file: 'C:\Users\Camero\.cloudflared\ZERO.json'
+# Cloudflared config for ZERO (Linux)
+# Modo token del conector (sin credentials-file)
 
+# Nombre del túnel en tu cuenta Cloudflare (informativo)
+tunnel: ZERO
+
+# Reglas de ingreso (hostnames reales apuntando al túnel)
 ingress:
   - hostname: app.zero-va.com
     service: http://localhost:8501
@@ -9,3 +13,7 @@ ingress:
   - hostname: control.zero-va.com
     service: http://localhost:8765
   - service: http_status:404
+
+# Opciones recomendadas
+autoupdate-freq: 24h
+no-autoupdate: true

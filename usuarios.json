@@ -47,5 +47,37 @@
         "clave": "jorge",
         "rol": "usuario",
         "nfc_uid": null
+    },
+    "Halley": {
+        "clave": "Mimimi8",
+        "rol": "usuario",
+        "nfc_uid": null
+    },
+    "invitado": {
+        "clave": "bienvenido",
+        "rol": "usuario",
+        "nfc_uid": null,
+        "fecha_registro": "2025-10-07 11:47:30"
+    },
+    "1111": {
+        "clave": "Qaz7xsw2*",
+        "rol": "usuario",
+        "nfc_uid": null
+    },
+    "Prueba": {
+        "clave": "Prueba",
+        "rol": "usuario",
+        "nfc_uid": null,
+        "fecha_registro": "2025-10-08 22:55:42"
+    },
+    "Lorepati": {
+        "clave": "Lorepati27",
+        "rol": "usuario",
+        "nfc_uid": null
+    },
+    "Tban": {
+        "clave": "12345",
+        "rol": "usuario",
+        "nfc_uid": null
     }
 }
