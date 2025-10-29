@@ -15,6 +15,7 @@ from dotenv import load_dotenv
 import requests
 import json
 import hashlib
+from werkzeug.security import generate_password_hash
 import io
 import csv
 import re
@@ -110,7 +111,8 @@ def initialize_session_state():
         "current_chat": str(uuid.uuid4()),
         "user_files": [],
         "user_context": [],
-        "sidebar_collapsed": False
+        "sidebar_collapsed": False,
+        "use_docs": False
     }
     
     for key, value in default_states.items():
@@ -745,16 +747,17 @@ def create_sidebar():
 
         st.markdown("---")
         if st.button("Cerrar Sesión", key="logout_btn", use_container_width=True, type="primary"):
-            try:
-                # Cerrar sesión local (Streamlit)
-                logout()
-                # Cerrar sesión backend (Flask) para limpiar cookie
-                try:
-                    requests.get(f"{PUBLIC_SITE_URL}/logout", timeout=3)
-                except Exception:
-                    pass
-            finally:
-                st.rerun()
+            # Cerrar sesión local (Streamlit)
+            logout()
+            # Redirigir al backend Flask para limpiar cookie y volver al login HTML
+            st.markdown(
+                f"""
+                <script>
+                window.location.href = "{PUBLIC_SITE_URL.rstrip('/')}/logout";
+                </script>
+                """,
+                unsafe_allow_html=True
+            )
 
 def analyze_document_with_groq(content, filename):
     try:
@@ -1376,6 +1379,8 @@ def chat_page():
     
     st.markdown('</div>', unsafe_allow_html=True)
     
+    st.checkbox("Usar mis archivos", key="use_docs", help="Solo analizaré/usaré tus archivos si activas esto.")
+    
     prompt = st.chat_input(
         "Escribe tu mensaje...",
         key=f"chat_input_{st.session_state.get('user_id','anon')}_{st.session_state.get('current_chat','default')}"
@@ -1388,7 +1393,9 @@ def chat_page():
         if is_greeting_or_smalltalk(prompt):
             pass
         else:
-            local = maybe_answer_doc_query(prompt, st.session_state.get("user_id"))
+            local = None
+            if st.session_state.get("use_docs"):
+                local = maybe_answer_doc_query(prompt, st.session_state.get("user_id"))
             if local:
                 try:
                     local = rewrite_with_editor(local, "Mantén el listado y rutas tal cual.")
@@ -1399,7 +1406,7 @@ def chat_page():
                 st.rerun()
                 return
 
-            if st.session_state.get("user_id") and is_analysis_question(prompt):
+            if st.session_state.get("use_docs") and st.session_state.get("user_id") and is_analysis_question(prompt):
                 doc_answer = answer_with_docs(prompt, st.session_state.user_id)
                 if doc_answer:
                     st.session_state.messages.append({"role": "assistant", "content": doc_answer})
@@ -1597,7 +1604,123 @@ def register_page():
     except Exception:
         users = []
 
-    tab1, tab2, tab3 = st.tabs(["Crear Empresa", "Asignar Usuario", "Empresas"])
+    tab_users, tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+        "Usuarios", "Crear Empresa", "Asignar Usuario", "Empresas", "Seguridad", "Archivos", "Configuración IA"
+    ]) 
+
+    # --- Usuarios ---
+    with tab_users:
+        st.subheader("Gestión de Usuarios")
+        if not users:
+            st.info("No hay usuarios aún.")
+        else:
+            st.write(f"Total usuarios: {len(users)}")
+            search_user = st.text_input("Buscar usuario", value="", help="Filtra por nombre de usuario")
+            users_view = users
+            if search_user.strip():
+                term = search_user.strip().lower()
+                users_view = [u for u in users if term in (u.get('username','').lower())]
+            cols = st.columns(2)
+            with cols[0]:
+                user_opt = st.selectbox(
+                    "Usuario",
+                    options=[(u['id'], u['username']) for u in users_view],
+                    format_func=lambda x: f"{x[1]} (id: {x[0]})",
+                    key="admin_user_select"
+                )
+            with cols[1]:
+                u_rec = next((u for u in users if u['id']==user_opt[0]), None)
+                st.write(f"Rol actual: {u_rec.get('rol') if u_rec else 'usuario'}")
+                if u_rec:
+                    st.write(f"Intentos fallidos: {u_rec.get('failed_attempts', 0)}")
+                    locked_until = u_rec.get('locked_until')
+                    st.write(f"Bloqueado hasta: {locked_until or '—'}")
+                    st.write(f"Último acceso: {u_rec.get('last_login') or '—'}")
+            st.markdown("----")
+            if st.button("Desbloquear cuenta / Resetear intentos", type="secondary"):
+                try:
+                    ok = db.reset_failed_attempts(user_opt[0])
+                    if ok:
+                        st.success("Cuenta desbloqueada y contadores reiniciados")
+                        users = db.list_users()
+                    else:
+                        st.error("No se pudo desbloquear la cuenta")
+                except Exception as e:
+                    st.error(f"Error desbloqueando cuenta: {e}")
+            with st.form("form_change_role"):
+                nuevo_rol = st.selectbox("Nuevo rol", options=["usuario", "admin", "editor"], index=0)
+                submit_role = st.form_submit_button("Cambiar rol", type="primary")
+                if submit_role:
+                    try:
+                        ok = db.update_user_role(user_opt[0], nuevo_rol)
+                        if ok:
+                            st.success("Rol actualizado")
+                            users = db.list_users()
+                        else:
+                            st.error("No se pudo actualizar el rol")
+                    except Exception as e:
+                        st.error(f"Error cambiando rol: {e}")
+            with st.form("form_reset_password"):
+                nueva_pwd = st.text_input("Nueva contraseña", type="password")
+                submit_pwd = st.form_submit_button("Resetear contraseña")
+                if submit_pwd:
+                    if not nueva_pwd.strip():
+                        st.error("Contraseña requerida")
+                    else:
+                        try:
+                            pwd_hash = generate_password_hash(nueva_pwd)
+                            ok = db.update_user_password(user_opt[0], pwd_hash)
+                            if ok:
+                                st.success("Contraseña actualizada")
+                            else:
+                                st.error("No se pudo actualizar la contraseña")
+                        except Exception as e:
+                            st.error(f"Error reseteando contraseña: {e}")
+            with st.form("form_nfc_uid"):
+                nuevo_nfc = st.text_input("NFC UID (opcional)")
+                submit_nfc = st.form_submit_button("Actualizar NFC UID")
+                if submit_nfc:
+                    try:
+                        ok = db.update_user_nfc_uid(user_opt[0], nuevo_nfc.strip() or None)
+                        if ok:
+                            st.success("NFC UID actualizado")
+                        else:
+                            st.error("No se pudo actualizar el NFC UID")
+                    except Exception as e:
+                        st.error(f"Error actualizando NFC UID: {e}")
+            st.markdown("----")
+            if st.button("Eliminar usuario", type="secondary"):
+                try:
+                    ok = db.delete_user(user_opt[0])
+                    if ok:
+                        st.success("Usuario eliminado")
+                        users = db.list_users()
+                    else:
+                        st.error("No se pudo eliminar el usuario")
+                except Exception as e:
+                    st.error(f"Error eliminando usuario: {e}")
+
+        st.markdown("### Crear nuevo usuario")
+        with st.form("form_create_user"):
+            nuevo_usuario = st.text_input("Usuario")
+            nueva_pwd2 = st.text_input("Contraseña", type="password")
+            rol_nuevo = st.selectbox("Rol", options=["usuario", "admin", "editor"], index=0)
+            submit_create = st.form_submit_button("Crear usuario", type="primary")
+            if submit_create:
+                if not nuevo_usuario.strip() or not nueva_pwd2.strip():
+                    st.error("Usuario y contraseña son requeridos")
+                else:
+                    try:
+                        pwd_hash2 = generate_password_hash(nueva_pwd2)
+                        ok = db.create_user(nuevo_usuario.strip(), pwd_hash2, rol=rol_nuevo)
+                        if ok:
+                            st.success(f"Usuario {nuevo_usuario} creado")
+                            users = db.list_users()
+                        else:
+                            st.error("No se pudo crear el usuario (¿ya existe?)")
+                    except Exception as e:
+                        st.error(f"Error creando usuario: {e}")
+
 
     # --- Crear Empresa ---
     with tab1:
@@ -1722,6 +1845,160 @@ def register_page():
                         )
                     except Exception as e:
                         st.warning(f"No se pudo generar CSV: {e}")
+    # --- Seguridad ---
+    with tab4:
+        st.subheader("Políticas de Seguridad")
+        if not companies:
+            st.info("Primero crea una empresa para configurar seguridad.")
+        else:
+            comp_opt = st.selectbox(
+                "Empresa",
+                options=[(c['id'], c['nombre']) for c in companies],
+                format_func=lambda x: f"{x[1]} (id: {x[0]})",
+                key="security_company_select"
+            )
+            try:
+                current = db.get_company_settings(comp_opt[0]) or {}
+            except Exception:
+                current = {}
+            sec = current.get("security", {}) if isinstance(current.get("security"), dict) else {}
+            with st.form("form_security_settings"):
+                colA, colB = st.columns(2)
+                with colA:
+                    max_attempts = st.number_input("Máx. intentos fallidos", min_value=1, max_value=20, value=int(sec.get("lockout_max_attempts", 5)))
+                    lock_minutes = st.number_input("Minutos de bloqueo", min_value=1, max_value=1440, value=int(sec.get("lockout_minutes", 15)))
+                    session_timeout = st.number_input("Timeout sesión (min)", min_value=5, max_value=1440, value=int(sec.get("session_timeout_minutes", 60)))
+                    rate_limit = st.number_input("Límite login por IP (min)", min_value=1, max_value=1000, value=int(sec.get("login_rate_limit_per_ip", 20)))
+                with colB:
+                    pwd_min_len = st.number_input("Longitud mínima contraseña", min_value=6, max_value=128, value=int(sec.get("password_min_length", 10)))
+                    pwd_digit = st.checkbox("Requerir dígito", value=bool(sec.get("password_require_digit", True)))
+                    pwd_upper = st.checkbox("Requerir mayúscula", value=bool(sec.get("password_require_upper", True)))
+                    pwd_symbol = st.checkbox("Requerir símbolo", value=bool(sec.get("password_require_symbol", True)))
+                    require_2fa = st.checkbox("Requerir 2FA (planeado)", value=bool(sec.get("require_2fa", False)))
+                save_sec = st.form_submit_button("Guardar políticas", type="primary")
+                if save_sec:
+                    updates = {
+                        "security": {
+                            "lockout_max_attempts": int(max_attempts),
+                            "lockout_minutes": int(lock_minutes),
+                            "session_timeout_minutes": int(session_timeout),
+                            "login_rate_limit_per_ip": int(rate_limit),
+                            "password_min_length": int(pwd_min_len),
+                            "password_require_digit": bool(pwd_digit),
+                            "password_require_upper": bool(pwd_upper),
+                            "password_require_symbol": bool(pwd_symbol),
+                            "require_2fa": bool(require_2fa)
+                        }
+                    }
+                    ok = db.update_company_settings(comp_opt[0], updates)
+                    if ok:
+                        st.success("Políticas actualizadas. Se aplicarán en próximos inicios de sesión.")
+                    else:
+                        st.error("No se pudieron guardar las políticas.")
+
+    # --- Archivos ---
+    with tab5:
+        st.subheader("Archivos por Empresa")
+        if not companies:
+            st.info("Primero crea una empresa para gestionar archivos.")
+        else:
+            comp_opt_files = st.selectbox(
+                "Empresa",
+                options=[(c['id'], c['nombre']) for c in companies],
+                format_func=lambda x: f"{x[1]} (id: {x[0]})",
+                key="files_company_select"
+            )
+            search_file = st.text_input("Buscar archivo", value="", help="Filtra por nombre")
+            try:
+                files = db.get_company_files(comp_opt_files[0])
+            except Exception:
+                files = []
+            files_view = files
+            if search_file.strip():
+                term = search_file.strip().lower()
+                files_view = [f for f in files if term in (f.get('filename','').lower())]
+
+            if not files_view:
+                st.info("No hay archivos para esta empresa.")
+            else:
+                for f in files_view:
+                    with st.expander(f"📄 {f.get('filename')} (id: {f.get('id')})"):
+                        st.write(f"Tamaño: {round((f.get('file_size') or 0)/1024,1)} KB")
+                        st.write(f"Tipo: {f.get('file_type')}")
+                        st.write(f"Subido: {f.get('uploaded_at')}")
+                        st.write(f"Usuario: {f.get('user_id')}")
+                        if st.button("Eliminar", key=f"del_{f.get('id')}"):
+                            try:
+                                path = f.get('file_path')
+                                if path and os.path.exists(path):
+                                    os.remove(path)
+                            except Exception:
+                                pass
+                            db.delete_file(f.get('id'), f.get('user_id'))
+                            st.success("Archivo eliminado")
+                            st.rerun()
+                # Export CSV
+                buf = io.StringIO()
+                writer = csv.writer(buf)
+                writer.writerow(["file_id","user_id","filename","file_type","file_size","uploaded_at","analysis_summary"])
+                for doc in files_view:
+                    writer.writerow([
+                        doc.get("id"), doc.get("user_id"), doc.get("filename"), doc.get("file_type"),
+                        doc.get("file_size"), doc.get("uploaded_at"), (doc.get("analysis_summary") or "").replace("\n"," ")
+                    ])
+                csv_bytes = buf.getvalue().encode("utf-8")
+                st.download_button(
+                    label="Descargar CSV mostrado",
+                    data=csv_bytes,
+                    file_name=f"empresa_{comp_opt_files[0]}_documentos_filtrados.csv",
+                    mime="text/csv"
+                )
+                st.markdown("----")
+                confirm_mass = st.checkbox("Confirmar eliminación masiva de TODOS los archivos listados")
+                if st.button("Eliminar todos los archivos listados", type="secondary"):
+                    if not confirm_mass:
+                        st.warning("Marca la confirmación para proceder.")
+                    else:
+                        deleted = 0
+                        for d in files_view:
+                            try:
+                                path = d.get('file_path')
+                                if path and os.path.exists(path):
+                                    os.remove(path)
+                            except Exception:
+                                pass
+                            try:
+                                db.delete_file(d.get('id'), d.get('user_id'))
+                                deleted += 1
+                            except Exception:
+                                pass
+                        st.success(f"Eliminados {deleted} archivos")
+                        st.rerun()
+
+    # --- Configuración IA ---
+    with tab6:
+        st.subheader("Configuración de IA por Empresa")
+        if not companies:
+            st.info("Crea una empresa para configurar IA.")
+        else:
+            for c in companies:
+                with st.expander(f"{c.get('nombre')} (id: {c.get('id')})", expanded=False):
+                    st.write(f"Slug: {c.get('slug')}")
+                    st.write(f"Modelo actual: {c.get('model_name') or '—'}")
+                    with st.form(f"form_ai_{c.get('id')}"):
+                        new_model = st.text_input("Modelo IA (Groq)", value=c.get('model_name') or "")
+                        new_key = st.text_input("Groq API Key", value=c.get('groq_api_key') or "", type="password")
+                        save_ai = st.form_submit_button("Guardar configuración IA", type="primary")
+                        if save_ai:
+                            try:
+                                ok = db.update_company_core(c.get('id'), groq_api_key=(new_key.strip() or None), model_name=(new_model.strip() or None))
+                                if ok:
+                                    st.success("Configuración de IA actualizada")
+                                else:
+                                    st.error("No se guardó la configuración (sin cambios)")
+                            except Exception as e:
+                                st.error(f"Error guardando configuración IA: {e}")
+
 
 def file_upload_page():
     st.title("📁 Gestión de Archivos")

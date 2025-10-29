@@ -5,9 +5,10 @@ import uuid
 import hashlib
 import logging
 from werkzeug.utils import secure_filename
+from werkzeug.security import generate_password_hash, check_password_hash
 from base64 import b64encode
 import requests
-from datetime import datetime
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from functools import wraps
 from flask_cors import CORS
@@ -163,54 +164,80 @@ def login():
             flash('Completa usuario y contraseña', 'error')
             return render_template('newlogin/index.html')
 
-        if usuario == 'admin' and clave == 'admin':
-            user_info = db.get_user_by_username('admin')
-            if not user_info:
-                pwd_hash = hashlib.sha256('admin'.encode('utf-8')).hexdigest()
-                db.create_user('admin', pwd_hash, rol='admin')
-                user_info = db.get_user_by_username('admin')
-            session['usuario'] = 'admin'
-            session['user_id'] = user_info.get('id') if user_info else None
-            session['rol'] = 'admin'
-            session['empresa_id'] = db.get_user_company_id(session['user_id']) if session.get('user_id') else None
-            if session.get('user_id'):
-                db.update_last_login(session['user_id'])
-            return redirect(url_for('index'))
+        user_info = db.get_user_by_username(usuario)
 
-        if verificar_login(usuario, clave):
-            rol_json = 'usuario'
+        # Verificar si la cuenta está bloqueada
+        if user_info:
+            locked_until = user_info.get('locked_until')
+            if locked_until:
+                try:
+                    locked_dt = datetime.fromisoformat(locked_until)
+                    if locked_dt > datetime.utcnow():
+                        flash('Cuenta bloqueada temporalmente. Intenta más tarde.', 'error')
+                        return render_template('newlogin/index.html')
+                except Exception:
+                    pass
+
+        # Bootstrap seguro para admin
+        if usuario == 'admin' and not user_info:
+            pwd_hash = generate_password_hash('admin')
+            db.create_user('admin', pwd_hash, rol='admin')
+            user_info = db.get_user_by_username('admin')
+
+        # Validación de contraseña
+        valid = False
+        rol = 'usuario'
+        if user_info:
+            stored_hash = user_info.get('password_hash') or ''
+            if stored_hash and check_password_hash(stored_hash, clave):
+                valid = True
+                rol = user_info.get('rol', 'usuario')
+        else:
+            # Compatibilidad: verificar usuarios.json y migrar al DB con hash seguro
             try:
                 with open(os.path.join(app.root_path, 'usuarios.json'), 'r', encoding='utf-8') as f:
                     usuarios = json.load(f)
+                candidate_role = 'usuario'
+                legacy_ok = False
                 if isinstance(usuarios, dict):
-                    dato = usuarios.get(usuario)
-                    if isinstance(dato, dict):
-                        rol_json = dato.get('rol', 'usuario')
+                    entry = usuarios.get(usuario)
+                    if isinstance(entry, dict):
+                        legacy_ok = (entry.get('clave') or entry.get('password')) == clave
+                        candidate_role = entry.get('rol', 'usuario')
+                    elif isinstance(entry, str):
+                        legacy_ok = entry == clave
                 elif isinstance(usuarios, list):
                     for u in usuarios:
                         name = u.get('usuario') or u.get('username')
                         if name == usuario:
-                            rol_json = u.get('rol', 'usuario')
+                            legacy_ok = (u.get('clave') or u.get('password')) == clave
+                            candidate_role = u.get('rol', 'usuario')
                             break
+                if legacy_ok:
+                    pwd_hash = generate_password_hash(clave)
+                    db.create_user(usuario, pwd_hash, rol=candidate_role)
+                    user_info = db.get_user_by_username(usuario)
+                    valid = True
+                    rol = candidate_role
             except Exception:
                 pass
 
-            user_info = db.get_user_by_username(usuario)
-            if not user_info:
-                pwd_hash = hashlib.sha256(clave.encode('utf-8')).hexdigest()
-                db.create_user(usuario, pwd_hash, rol=rol_json)
-                user_info = db.get_user_by_username(usuario)
+        if not valid:
+            # Registrar intento fallido
+            if user_info:
+                db.increment_failed_attempts(user_info['id'])
+            flash('Credenciales inválidas', 'error')
+            return render_template('newlogin/index.html')
 
-            session['usuario'] = usuario
-            session['user_id'] = user_info.get('id') if user_info else None
-            session['rol'] = user_info.get('rol', rol_json) if user_info else rol_json
-            session['empresa_id'] = db.get_user_company_id(session['user_id']) if session.get('user_id') else None
-            if session.get('user_id'):
-                db.update_last_login(session['user_id'])
-            return redirect(url_for('index'))
-
-        flash('Credenciales inválidas', 'error')
-        return render_template('newlogin/index.html')
+        # Éxito: resetear intentos y actualizar sesión
+        if user_info:
+            db.reset_failed_attempts(user_info['id'])
+            db.update_last_login(user_info['id'])
+        session['usuario'] = usuario
+        session['user_id'] = user_info.get('id') if user_info else None
+        session['rol'] = user_info.get('rol', rol) if user_info else rol
+        session['empresa_id'] = db.get_user_company_id(session['user_id']) if session.get('user_id') else None
+        return redirect(url_for('index'))
 
     return render_template('newlogin/index.html')
 
@@ -243,7 +270,7 @@ def register():
         return render_template('newlogin/index.html')
 
     try:
-        pwd_hash = hashlib.sha256(clave.encode('utf-8')).hexdigest()
+        pwd_hash = generate_password_hash(clave)
         user_info = db.get_user_by_username(usuario)
         if not user_info:
             db.create_user(usuario, pwd_hash, rol=rol)

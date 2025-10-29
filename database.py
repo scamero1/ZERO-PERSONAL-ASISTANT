@@ -2,7 +2,7 @@ import sqlite3
 import json
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 import uuid
 import csv
@@ -66,11 +66,15 @@ class ZeroDatabase:
                 """
             )
 
-            # Agregar columna empresa_id si no existe
+            # Agregar columnas opcionales si no existen
             cur.execute("PRAGMA table_info(usuarios);")
             cols = [r[1] for r in cur.fetchall()]
             if "empresa_id" not in cols:
                 cur.execute("ALTER TABLE usuarios ADD COLUMN empresa_id INTEGER;")
+            if "failed_attempts" not in cols:
+                cur.execute("ALTER TABLE usuarios ADD COLUMN failed_attempts INTEGER DEFAULT 0;")
+            if "locked_until" not in cols:
+                cur.execute("ALTER TABLE usuarios ADD COLUMN locked_until TEXT;")
 
             # Tabla de chats
             cur.execute(
@@ -224,6 +228,26 @@ class ZeroDatabase:
             cur = conn.execute("SELECT * FROM usuarios ORDER BY created_at DESC;")
             return [dict(r) for r in cur.fetchall()]
 
+    def update_user_role(self, user_id: int, new_role: str) -> bool:
+        with self.get_connection() as conn:
+            conn.execute("UPDATE usuarios SET rol = ? WHERE id = ?;", (new_role, user_id))
+        return True
+
+    def update_user_password(self, user_id: int, new_password_hash: str) -> bool:
+        with self.get_connection() as conn:
+            conn.execute("UPDATE usuarios SET password_hash = ? WHERE id = ?;", (new_password_hash, user_id))
+        return True
+
+    def update_user_nfc_uid(self, user_id: int, nfc_uid: Optional[str]) -> bool:
+        with self.get_connection() as conn:
+            conn.execute("UPDATE usuarios SET nfc_uid = ? WHERE id = ?;", (nfc_uid, user_id))
+        return True
+
+    def delete_user(self, user_id: int) -> bool:
+        with self.get_connection() as conn:
+            conn.execute("DELETE FROM usuarios WHERE id = ?;", (user_id,))
+        return True
+
     def update_last_login(self, user_id: int):
         with self.get_connection() as conn:
             conn.execute("UPDATE usuarios SET last_login = CURRENT_TIMESTAMP WHERE id = ?;", (user_id,))
@@ -287,6 +311,33 @@ class ZeroDatabase:
             settings_json = json.dumps(current)
             with self.get_connection() as conn:
                 conn.execute("UPDATE empresas SET settings_json = ? WHERE id = ?;", (settings_json, empresa_id))
+            return True
+        except Exception:
+            return False
+
+    def update_company_core(self, empresa_id: int, nombre: Optional[str] = None, slug: Optional[str] = None,
+                             groq_api_key: Optional[str] = None, model_name: Optional[str] = None) -> bool:
+        try:
+            fields = []
+            params: list = []
+            if nombre is not None:
+                fields.append("nombre = ?")
+                params.append(nombre)
+            if slug is not None:
+                fields.append("slug = ?")
+                params.append(slug)
+            if groq_api_key is not None:
+                fields.append("groq_api_key = ?")
+                params.append(groq_api_key)
+            if model_name is not None:
+                fields.append("model_name = ?")
+                params.append(model_name)
+            if not fields:
+                return False
+            params.append(empresa_id)
+            sql = f"UPDATE empresas SET {', '.join(fields)} WHERE id = ?;"
+            with self.get_connection() as conn:
+                conn.execute(sql, params)
             return True
         except Exception:
             return False
@@ -545,3 +596,32 @@ class ZeroDatabase:
             return True
         except Exception:
             return False
+
+    def increment_failed_attempts(self, user_id: int, max_attempts: int = 5, lock_minutes: int = 15):
+        with self.get_connection() as conn:
+            cur = conn.execute("SELECT failed_attempts FROM usuarios WHERE id = ?;", (user_id,))
+            row = cur.fetchone()
+            current = row[0] if row else 0
+            count = (current if current is not None else 0) + 1
+            locked_until = None
+            if count >= max_attempts:
+                # bloquea por lock_minutes desde ahora (UTC ISO)
+                locked_dt = datetime.utcnow() + timedelta(minutes=lock_minutes)
+                locked_until = locked_dt.isoformat()
+                conn.execute(
+                    "UPDATE usuarios SET failed_attempts = ?, locked_until = ? WHERE id = ?;",
+                    (count, locked_until, user_id),
+                )
+            else:
+                conn.execute(
+                    "UPDATE usuarios SET failed_attempts = ? WHERE id = ?;",
+                    (count, user_id),
+                )
+            return count, locked_until
+
+    def reset_failed_attempts(self, user_id: int):
+        with self.get_connection() as conn:
+            conn.execute(
+                "UPDATE usuarios SET failed_attempts = 0, locked_until = NULL WHERE id = ?;",
+                (user_id,),
+            )
