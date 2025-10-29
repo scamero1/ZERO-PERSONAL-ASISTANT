@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ZERO AI</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/index.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('newlogin_css') }}" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
   <link rel="icon" type="image/jpeg" href="{{ url_for('favicon') }}">
 </head>
@@ -32,11 +32,11 @@
       <!-- Login -->
       <form id="login-form" class="form active" action="{{ url_for('login') }}" method="POST">
         <h2>ZERO AI</h2>
-        <p>Ingrese su usario y contraseña</p>
+        <p>Por favor ingrese su usuario o correo y su contraseña</p>
 
         <div class="input-box">
           <i class="fa-solid fa-user"></i>
-          <input type="text" name="usuario" placeholder="Usuario o Correo" required>
+          <input type="text" name="usuario" placeholder="Usuario o correo" required>
         </div>
 
         <div class="input-box">
@@ -44,16 +44,16 @@
           <input type="password" name="clave" placeholder="Contraseña" required>
         </div>
 
-        <button type="submit" class="btn">Login</button>
+        <button type="submit" class="btn">Iniciar sesión</button>
 
         <div class="switch">
-          ¿No tienes cuenta? <a href="#" id="show-register">Registrate!</a>
+          ¿Todavía no estás registrado? <a href="#" id="show-register">¡Regístrate!</a>
         </div>
       </form>
 
       <!-- Register -->
       <form id="register-form" class="form" method="post" action="{{ url_for('register') }}">
-        <h2>Registro</h2>
+        <h2>Register</h2>
         <p>Por favor escriba su usuario, correo y contraseña</p>
 
         <div class="input-box">
@@ -73,7 +73,7 @@
 
         <div class="input-box">
           <i class="fa-solid fa-lock"></i>
-          <input type="password" name="confirmar" placeholder="Ingrese otra vez su contraseña" required>
+          <input type="password" name="confirmar" placeholder="Introduzca nuevamente su contraseña" required>
         </div>
 
         <input type="hidden" name="rol" value="usuario">
@@ -81,14 +81,14 @@
         <button type="submit" class="btn">Register</button>
 
         <div class="switch">
-          ¿Ya tienes una cuenta? <a href="#" id="show-login">Accede!</a>
+          ¿Ya tienes una cuenta? <a href="#" id="show-login">¡Inicia sesión!</a>
         </div>
       </form>
     </div>
 
     <!-- Espacio reservado para el logo -->
     <div class="logo-space">
-      <img src="{{ url_for('favicon') }}" alt="Logo ZERO">
+      <img src="/favicon.ico" alt="Logo ZERO">
     </div>
   </div>
 
